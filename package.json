@@ -1,0 +1,33 @@
+{
+  "name": "qwen3-jira-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NestJS scaffold for the qwen3JiraMCP MVP",
+  "license": "UNLICENSED",
+  "bin": {
+    "qwen-jira": "dist/cli-entry.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start:api": "node dist/server-entry.js",
+    "start:cli": "node dist/cli-entry.js",
+    "start:mcp": "node dist/mcp-entry.js",
+    "start:dev:api": "node --enable-source-maps --loader ts-node/esm src/server-entry.ts",
+    "start:dev:cli": "node --enable-source-maps --loader ts-node/esm src/cli-entry.ts",
+    "start:dev:mcp": "node --enable-source-maps --loader ts-node/esm src/mcp-entry.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.19",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
