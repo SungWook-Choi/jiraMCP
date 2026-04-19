@@ -8,7 +8,7 @@ export class McpService {
 
   getServerDescriptor() {
     return {
-      name: 'qwen3-jira-mcp',
+      name: 'qwen-jira-mcp',
       status: 'scaffold',
       sharedQueryShape: this.queryService.createEmptyQuery(),
     };

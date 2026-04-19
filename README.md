@@ -2,6 +2,16 @@
 
 NestJS + TypeScript scaffold for the MVP described in [docs/work-instruction.md](/Users/bbosungmini/WebstormProjects/qwen3JiraMCP/docs/work-instruction.md).
 
+## npm Distribution Direction
+
+The current npm packaging direction is a single package:
+
+- Package name: `qwen-jira-mcp`
+- Primary CLI command: `qwen-jira`
+- Companion commands: `qwen-jira-server`, `qwen-jira-mcp`
+
+This keeps the current server-centered MVP structure intact while exposing separate user-facing commands for the CLI, local API server, and MCP entry flow.
+
 ## Scope of This Scaffold
 
 This scaffold sets up the shared application structure for:
@@ -67,6 +77,7 @@ Optional variables:
 
 - `src/cli-entry.ts`: CLI-oriented Nest application context bootstrap
 - `src/mcp-entry.ts`: MCP-oriented Nest application context bootstrap
+- `src/server-entry.ts`: local API server bootstrap
 
 Both entry paths reuse the same `AppModule` so future CLI and MCP features can share the same core logic.
 
@@ -89,14 +100,45 @@ The initial shared schema placeholder is defined in [src/query/query.schema.ts](
 }
 ```
 
-## Commands
+## npm Install And Run
 
-After installing dependencies:
+Local package verification before npm publish:
 
 ```bash
 npm install
 npm run build
+npm link
+```
+
+After linking the local package, the following commands are available from your shell:
+
+```bash
+qwen-jira-server
+qwen-jira
+qwen-jira-mcp
+```
+
+The current MVP flow is server-centered:
+
+1. Start `qwen-jira-server`
+2. Run `qwen-jira` in another shell
+3. Keep using environment variables for Jira connection and `QWEN_JIRA_API_BASE_URL` when the CLI should call a non-default server
+
+Planned install shape for a future npm release:
+
+```bash
+npm install -g qwen-jira-mcp
+qwen-jira-server
+qwen-jira
+```
+
+## Development Commands
+
+Repository-local development commands remain available:
+
+```bash
 npm run start:api
+npm run start:server
 npm run start:cli
 npm run start:mcp
 ```

@@ -1,15 +1,42 @@
 {
-  "name": "qwen3-jira-mcp",
+  "name": "qwen-jira-mcp",
   "version": "0.1.0",
-  "private": true,
-  "description": "NestJS scaffold for the qwen3JiraMCP MVP",
+  "description": "CLI, local API server, and MCP entrypoints for the qwen Jira MVP",
   "license": "UNLICENSED",
-  "bin": {
-    "qwen-jira": "dist/cli-entry.js"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SungWook-Choi/jiraMCP.git"
   },
+  "homepage": "https://github.com/SungWook-Choi/jiraMCP#readme",
+  "bugs": {
+    "url": "https://github.com/SungWook-Choi/jiraMCP/issues"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    ".env.example"
+  ],
+  "bin": {
+    "qwen-jira": "bin/qwen-jira.js",
+    "qwen-jira-server": "bin/qwen-jira-server.js",
+    "qwen-jira-mcp": "bin/qwen-jira-mcp.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "jira",
+    "nestjs",
+    "cli",
+    "mcp",
+    "server"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "start:api": "node dist/server-entry.js",
+    "start:server": "node dist/server-entry.js",
     "start:cli": "node dist/cli-entry.js",
     "start:mcp": "node dist/mcp-entry.js",
     "start:dev:api": "node --enable-source-maps --loader ts-node/esm src/server-entry.ts",
