@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import { JiraSearchRequest, JiraSearchResult } from '../jira/jira.service.js';
+import { JiraProjectCandidate, JiraSearchRequest, JiraSearchResult } from '../jira/jira.service.js';
 import { QueryMode, QuerySchema } from '../query/query.schema.js';
 
 interface JiraSearchApiRequest {
@@ -8,6 +8,8 @@ interface JiraSearchApiRequest {
   assignee?: string;
   projectKey?: string;
   period?: string;
+  startDate?: string;
+  endDate?: string;
   outputFormat?: QuerySchema['output']['format'];
 }
 
@@ -56,13 +58,22 @@ export class CliApiClient {
     return (await response.json()) as JiraSearchApiResponse;
   }
 
+  async lookupProjects(query: string): Promise<JiraProjectCandidate[]> {
+    const encodedQuery = encodeURIComponent(query);
+    const response = await this.fetchFromServer(`/jira/projects?query=${encodedQuery}`, {
+      method: 'GET',
+    });
+
+    return (await response.json()) as JiraProjectCandidate[];
+  }
+
   private async fetchFromServer(path: string, init: RequestInit): Promise<Response> {
     const url = `${this.getBaseUrl()}${path}`;
     let response: Response;
 
     try {
       response = await fetch(url, init);
-    } catch (error) {
+    } catch {
       throw new Error(
         `Local server is unavailable at ${this.getBaseUrl()}. Start the API server and try again.`,
       );

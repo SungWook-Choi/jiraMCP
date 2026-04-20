@@ -5,5 +5,7 @@ export interface CliCollectedQuery {
   assignee?: string;
   projectKey?: string;
   period?: string;
+  startDate?: string;
+  endDate?: string;
   outputFormat: 'console' | 'markdown';
 }

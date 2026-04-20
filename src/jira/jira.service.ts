@@ -9,6 +9,11 @@ export interface JiraSearchRequest {
   query: QuerySchema;
 }
 
+export interface JiraProjectCandidate {
+  key: string;
+  name: string;
+}
+
 export interface JiraSearchResult {
   issues: Array<{
     key: string;
@@ -39,6 +44,15 @@ interface JiraUserSearchResponseItem {
   key?: string;
 }
 
+interface JiraChangelogItem {
+  field: string;
+}
+
+interface JiraChangelogHistory {
+  created: string;
+  items: JiraChangelogItem[];
+}
+
 interface JiraIssueResponse {
   key?: string;
   fields?: {
@@ -53,6 +67,7 @@ interface JiraIssueResponse {
       key?: string;
       name?: string;
     };
+    created?: string;
     updated?: string;
     description?: unknown;
     comment?: {
@@ -61,15 +76,29 @@ interface JiraIssueResponse {
       }>;
     };
   };
+  changelog?: {
+    histories?: JiraChangelogHistory[];
+  };
 }
 
 const JIRA_SEARCH_PATH = '/rest/api/3/search/jql';
 const JIRA_USER_SEARCH_PATH = '/rest/api/3/user/search';
+const JIRA_PROJECT_SEARCH_PATH = '/rest/api/3/project/search';
+const CHANGELOG_TRACKED_FIELDS = new Set([
+  'status',
+  'assignee',
+  'summary',
+  'description',
+  'timespent',
+  'timeestimate',
+  'timeoriginalestimate',
+]);
 const JIRA_SEARCH_FIELDS = [
   'summary',
   'status',
   'assignee',
   'project',
+  'created',
   'updated',
   'description',
   'comment',
@@ -111,6 +140,7 @@ export class JiraService {
         jql: request.jql,
         fields: JIRA_SEARCH_FIELDS,
         maxResults: JIRA_MAX_RESULTS,
+        expand: 'changelog',
       }),
     });
 
@@ -123,9 +153,13 @@ export class JiraService {
     }
 
     const payload = (await response.json()) as JiraSearchResponse;
+    const bounds = this.computePeriodBounds(query);
+    const matchedIssues = (payload.issues ?? []).filter((issue) =>
+      this.hasRelevantChangelogActivity(issue, bounds.start, bounds.end),
+    );
 
     return {
-      issues: (payload.issues ?? []).map((issue) => this.normalizeIssue(issue)),
+      issues: matchedIssues.map((issue) => this.normalizeIssue(issue)),
       request,
       total: payload.total ?? 0,
     };
@@ -154,8 +188,10 @@ export class JiraService {
       clauses.push(`project in (${query.projectKeys.map(this.quoteValue).join(', ')})`);
     }
 
-    if (query.period === 'this_week') {
-      clauses.push('updated >= startOfWeek()');
+    const periodClause = this.buildPeriodClause(query);
+
+    if (periodClause) {
+      clauses.push(periodClause);
     }
 
     if (clauses.length === 0) {
@@ -163,6 +199,89 @@ export class JiraService {
     }
 
     return `${clauses.join(' AND ')} ORDER BY updated DESC`;
+  }
+
+  private buildPeriodClause(query: QuerySchema): string | null {
+    switch (query.period) {
+      case 'this_week':
+        return this.buildCandidatePeriodClause(
+          'updated >= startOfWeek()',
+          'created >= startOfWeek()',
+          'status changed AFTER startOfWeek()',
+        );
+      case 'last_week':
+        return this.buildCandidatePeriodClause(
+          'updated >= startOfWeek(-1) AND updated < startOfWeek()',
+          'created >= startOfWeek(-1) AND created < startOfWeek()',
+          'status changed DURING (startOfWeek(-1), startOfWeek())',
+        );
+      case 'today':
+        return this.buildCandidatePeriodClause(
+          'updated >= startOfDay()',
+          'created >= startOfDay()',
+          'status changed AFTER startOfDay()',
+        );
+      case 'yesterday':
+        return this.buildCandidatePeriodClause(
+          'updated >= startOfDay(-1) AND updated < startOfDay()',
+          'created >= startOfDay(-1) AND created < startOfDay()',
+          'status changed DURING (startOfDay(-1), startOfDay())',
+        );
+      case 'custom_range':
+        if (query.startDate && query.endDate) {
+          const nextDay = this.addOneDay(query.endDate);
+
+          return `updated >= "${query.startDate}" AND updated < "${nextDay}"`;
+        }
+
+        return null;
+      default:
+        return null;
+    }
+  }
+
+  private buildCandidatePeriodClause(
+    updatedClause: string,
+    createdClause: string,
+    statusChangedClause: string,
+  ): string {
+    return `((${updatedClause}) OR (${createdClause}) OR (${statusChangedClause}))`;
+  }
+
+  async lookupProjects(query: string): Promise<JiraProjectCandidate[]> {
+    const settings = this.getSettings();
+    const url = this.buildProjectSearchUrl(settings.baseUrl, query);
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: this.createAuthorizationHeader(settings),
+      },
+    });
+
+    if (!response.ok) {
+      const errorBody = await this.readResponseBody(response);
+
+      throw new Error(
+        `Project lookup request failed (${response.status} ${response.statusText}): ${errorBody}`,
+      );
+    }
+
+    const payload = (await response.json()) as { values?: Array<{ key?: string; name?: string }> };
+
+    return (payload.values ?? [])
+      .map((p) => ({ key: (p.key ?? '').trim(), name: (p.name ?? '').trim() }))
+      .filter((p) => p.key.length > 0);
+  }
+
+  private buildProjectSearchUrl(baseUrl: string, query: string): string {
+    const normalizedBaseUrl = this.normalizeBaseUrl(baseUrl);
+    const url = new URL(`${normalizedBaseUrl}${JIRA_PROJECT_SEARCH_PATH}`);
+
+    url.searchParams.set('query', query);
+    url.searchParams.set('maxResults', '20');
+
+    return url.toString();
   }
 
   private async buildAssigneeClause(
@@ -293,6 +412,84 @@ export class JiraService {
     return [candidate.accountId, candidate.displayName, candidate.emailAddress, candidate.name, candidate.key]
       .map((value) => this.normalizeLookupValue(value))
       .some((value) => value === normalizedInput);
+  }
+
+  private computePeriodBounds(query: QuerySchema): { start: Date; end: Date } {
+    const now = new Date();
+
+    switch (query.period) {
+      case 'today': {
+        const start = this.startOfLocalDay(now);
+        return { start, end: now };
+      }
+      case 'yesterday': {
+        const end = this.startOfLocalDay(now);
+        const start = new Date(end);
+        start.setDate(start.getDate() - 1);
+        return { start, end };
+      }
+      case 'this_week': {
+        const start = this.startOfLocalWeek(now);
+        return { start, end: now };
+      }
+      case 'last_week': {
+        const end = this.startOfLocalWeek(now);
+        const start = new Date(end);
+        start.setDate(start.getDate() - 7);
+        return { start, end };
+      }
+      case 'custom_range': {
+        if (!query.startDate || !query.endDate) {
+          return { start: new Date(0), end: now };
+        }
+
+        const start = this.parseLocalDate(query.startDate);
+        const end = this.parseLocalDate(this.addOneDay(query.endDate));
+        return { start, end };
+      }
+      default:
+        return { start: new Date(0), end: now };
+    }
+  }
+
+  private hasRelevantChangelogActivity(issue: JiraIssueResponse, start: Date, end: Date): boolean {
+    const histories = issue.changelog?.histories ?? [];
+
+    for (const history of histories) {
+      const created = new Date(history.created);
+
+      if (created < start || created >= end) {
+        continue;
+      }
+
+      for (const item of history.items) {
+        if (CHANGELOG_TRACKED_FIELDS.has(item.field.toLowerCase())) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private startOfLocalDay(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  private startOfLocalWeek(date: Date): Date {
+    const start = this.startOfLocalDay(date);
+    const day = start.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+
+    start.setDate(start.getDate() + diff);
+
+    return start;
+  }
+
+  private parseLocalDate(date: string): Date {
+    const [year, month, day] = date.split('-').map((value) => Number.parseInt(value, 10));
+
+    return new Date(year, month - 1, day);
   }
 
   private normalizeIssue(issue: JiraIssueResponse): JiraSearchResult['issues'][number] {
@@ -462,6 +659,14 @@ export class JiraService {
 
   private uniqueValues(values: string[]): string[] {
     return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
+  }
+
+  private addOneDay(date: string): string {
+    const d = new Date(`${date}T00:00:00Z`);
+
+    d.setUTCDate(d.getUTCDate() + 1);
+
+    return d.toISOString().slice(0, 10);
   }
 
   private normalizeLookupValue(value?: string): string {

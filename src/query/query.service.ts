@@ -5,7 +5,10 @@ import {
   QueryMode,
   QueryPeriod,
   QuerySchema,
+  VALID_PERIODS,
 } from './query.schema.js';
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 
 @Injectable()
 export class QueryService {
@@ -26,13 +29,23 @@ export class QueryService {
     assignee?: string;
     projectKey?: string;
     period?: string;
+    startDate?: string;
+    endDate?: string;
     outputFormat?: OutputFormat;
   }): QuerySchema {
+    const period = this.normalizePeriod(input.period);
+
+    if (period === 'custom_range') {
+      this.validateCustomRange(input.startDate, input.endDate);
+    }
+
     return {
       mode: input.mode,
       assignees: this.normalizeAssignees(input.mode, input.assignee),
       projectKeys: this.normalizeProjectKeys(input.mode, input.projectKey),
-      period: this.normalizePeriod(input.period),
+      period,
+      startDate: period === 'custom_range' ? input.startDate : undefined,
+      endDate: period === 'custom_range' ? input.endDate : undefined,
       output: {
         format: input.outputFormat ?? 'console',
       },
@@ -46,7 +59,35 @@ export class QueryService {
       return 'this_week';
     }
 
-    return normalized;
+    if (!VALID_PERIODS.includes(normalized as QueryPeriod)) {
+      throw new Error(
+        `period must be one of: ${VALID_PERIODS.join(', ')}. Received: "${normalized}".`,
+      );
+    }
+
+    return normalized as QueryPeriod;
+  }
+
+  private validateCustomRange(startDate?: string, endDate?: string): void {
+    if (!startDate) {
+      throw new Error('startDate is required when period is custom_range. Use YYYY-MM-DD format.');
+    }
+
+    if (!endDate) {
+      throw new Error('endDate is required when period is custom_range. Use YYYY-MM-DD format.');
+    }
+
+    if (!DATE_PATTERN.test(startDate)) {
+      throw new Error(`startDate must be in YYYY-MM-DD format. Received: "${startDate}".`);
+    }
+
+    if (!DATE_PATTERN.test(endDate)) {
+      throw new Error(`endDate must be in YYYY-MM-DD format. Received: "${endDate}".`);
+    }
+
+    if (startDate > endDate) {
+      throw new Error(`startDate (${startDate}) must not be after endDate (${endDate}).`);
+    }
   }
 
   private normalizeAssignees(mode: QueryMode, assignee?: string): string[] {

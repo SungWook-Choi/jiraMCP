@@ -1,17 +1,20 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { OutputFormat, QueryMode } from '../query/query.schema.js';
+import { OutputFormat, QueryMode, VALID_PERIODS } from '../query/query.schema.js';
 
 export interface JiraSearchHttpRequest {
   mode: QueryMode;
   assignee?: string;
   projectKey?: string;
   period?: string;
+  startDate?: string;
+  endDate?: string;
   outputFormat?: OutputFormat;
 }
 
 const QUERY_MODES: QueryMode[] = ['assignee', 'project', 'assignee_project'];
 const OUTPUT_FORMATS: OutputFormat[] = ['console', 'markdown'];
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 
 export function parseJiraSearchRequest(body: unknown): JiraSearchHttpRequest {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -24,7 +27,9 @@ export function parseJiraSearchRequest(body: unknown): JiraSearchHttpRequest {
   const mode = parseMode(source.mode);
   const assignee = parseOptionalString(source.assignee, 'assignee');
   const projectKey = parseOptionalString(source.projectKey, 'projectKey');
-  const period = parseOptionalString(source.period, 'period');
+  const period = parseOptionalPeriod(source.period);
+  const startDate = parseOptionalString(source.startDate, 'startDate');
+  const endDate = parseOptionalString(source.endDate, 'endDate');
   const outputFormat = parseOptionalOutputFormat(source.outputFormat);
 
   if ((mode === 'assignee' || mode === 'assignee_project') && !assignee) {
@@ -39,11 +44,45 @@ export function parseJiraSearchRequest(body: unknown): JiraSearchHttpRequest {
     );
   }
 
+  if (period === 'custom_range') {
+    if (!startDate) {
+      throw new BadRequestException(
+        'startDate is required when period is custom_range. Use YYYY-MM-DD format.',
+      );
+    }
+
+    if (!endDate) {
+      throw new BadRequestException(
+        'endDate is required when period is custom_range. Use YYYY-MM-DD format.',
+      );
+    }
+
+    if (!DATE_PATTERN.test(startDate)) {
+      throw new BadRequestException(
+        `startDate must be in YYYY-MM-DD format. Received: "${startDate}".`,
+      );
+    }
+
+    if (!DATE_PATTERN.test(endDate)) {
+      throw new BadRequestException(
+        `endDate must be in YYYY-MM-DD format. Received: "${endDate}".`,
+      );
+    }
+
+    if (startDate > endDate) {
+      throw new BadRequestException(
+        `startDate (${startDate}) must not be after endDate (${endDate}).`,
+      );
+    }
+  }
+
   return {
     mode,
     assignee,
     projectKey,
     period,
+    startDate,
+    endDate,
     outputFormat,
   };
 }
@@ -60,6 +99,32 @@ function parseMode(value: unknown): QueryMode {
   if (!QUERY_MODES.includes(normalized)) {
     throw new BadRequestException(
       'mode must be one of: assignee, project, assignee_project.',
+    );
+  }
+
+  return normalized;
+}
+
+function parseOptionalPeriod(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    throw new BadRequestException(
+      `period must be one of: ${VALID_PERIODS.join(', ')}.`,
+    );
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (!VALID_PERIODS.includes(normalized as (typeof VALID_PERIODS)[number])) {
+    throw new BadRequestException(
+      `period must be one of: ${VALID_PERIODS.join(', ')}. Received: "${normalized}".`,
     );
   }
 

@@ -24,6 +24,10 @@ export class ApiService {
     };
   }
 
+  async lookupProjects(query: string) {
+    return this.jiraService.lookupProjects(query);
+  }
+
   async searchJira(request: JiraSearchHttpRequest) {
     const query = this.queryService.createQuery(request);
     const result = await this.jiraService.searchIssues(query);

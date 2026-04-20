@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 
 import { ApiService } from './api.service.js';
 import { parseJiraSearchRequest } from './jira-search.request.js';
@@ -17,5 +18,14 @@ export class ApiController {
     const request = parseJiraSearchRequest(body);
 
     return this.apiService.searchJira(request);
+  }
+
+  @Get('jira/projects')
+  async lookupProjects(@Query('query') query: string) {
+    if (!query || query.trim().length === 0) {
+      throw new BadRequestException('query parameter is required.');
+    }
+
+    return this.apiService.lookupProjects(query.trim());
   }
 }
