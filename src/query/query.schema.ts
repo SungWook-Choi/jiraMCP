@@ -1,4 +1,5 @@
 export type QueryMode = 'assignee' | 'project' | 'assignee_project';
+export type AssigneeMode = 'personal' | 'all';
 
 export type OutputFormat = 'console' | 'markdown';
 export type QueryPeriod = 'this_week' | 'last_week' | 'today' | 'yesterday' | 'custom_range';
@@ -17,6 +18,7 @@ export interface QueryOutput {
 
 export interface QuerySchema {
   mode: QueryMode;
+  assigneeMode: AssigneeMode;
   assignees: string[];
   projectKeys: string[];
   period: QueryPeriod;

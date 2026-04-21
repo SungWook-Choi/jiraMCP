@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import {
+  AssigneeMode,
   OutputFormat,
   QueryMode,
   QueryPeriod,
@@ -15,6 +16,7 @@ export class QueryService {
   createEmptyQuery(): QuerySchema {
     return {
       mode: 'assignee',
+      assigneeMode: 'personal',
       assignees: [],
       projectKeys: [],
       period: 'this_week',
@@ -26,6 +28,7 @@ export class QueryService {
 
   createQuery(input: {
     mode: QueryMode;
+    assigneeMode?: AssigneeMode;
     assignee?: string;
     projectKey?: string;
     period?: string;
@@ -33,7 +36,8 @@ export class QueryService {
     endDate?: string;
     outputFormat?: OutputFormat;
   }): QuerySchema {
-    const period = this.normalizePeriod(input.period);
+    const assigneeMode = this.normalizeAssigneeMode(input.mode, input.assigneeMode);
+    const period = this.normalizePeriod(input.period, input.mode, assigneeMode);
 
     if (period === 'custom_range') {
       this.validateCustomRange(input.startDate, input.endDate);
@@ -41,7 +45,8 @@ export class QueryService {
 
     return {
       mode: input.mode,
-      assignees: this.normalizeAssignees(input.mode, input.assignee),
+      assigneeMode,
+      assignees: this.normalizeAssignees(input.mode, assigneeMode, input.assignee),
       projectKeys: this.normalizeProjectKeys(input.mode, input.projectKey),
       period,
       startDate: period === 'custom_range' ? input.startDate : undefined,
@@ -52,7 +57,15 @@ export class QueryService {
     };
   }
 
-  normalizePeriod(period?: string): QueryPeriod {
+  normalizePeriod(
+    period?: string,
+    mode?: QueryMode,
+    assigneeMode?: AssigneeMode,
+  ): QueryPeriod {
+    if (mode === 'assignee' && assigneeMode === 'all') {
+      return 'this_week';
+    }
+
     const normalized = period?.trim().toLowerCase();
 
     if (!normalized) {
@@ -66,6 +79,18 @@ export class QueryService {
     }
 
     return normalized as QueryPeriod;
+  }
+
+  private normalizeAssigneeMode(mode: QueryMode, assigneeMode?: AssigneeMode): AssigneeMode {
+    if (mode !== 'assignee') {
+      return 'personal';
+    }
+
+    if (!assigneeMode) {
+      return 'personal';
+    }
+
+    return assigneeMode;
   }
 
   private validateCustomRange(startDate?: string, endDate?: string): void {
@@ -90,8 +115,16 @@ export class QueryService {
     }
   }
 
-  private normalizeAssignees(mode: QueryMode, assignee?: string): string[] {
+  private normalizeAssignees(
+    mode: QueryMode,
+    assigneeMode: AssigneeMode,
+    assignee?: string,
+  ): string[] {
     if (mode === 'project') {
+      return [];
+    }
+
+    if (mode === 'assignee' && assigneeMode === 'all') {
       return [];
     }
 

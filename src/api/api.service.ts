@@ -4,7 +4,7 @@ import { getMissingJiraEnv } from '../config/jira-settings.js';
 import { JiraService } from '../jira/jira.service.js';
 import { QueryService } from '../query/query.service.js';
 import { SummaryService } from '../summary/summary.service.js';
-import { JiraSearchHttpRequest } from './jira-search.request.js';
+import { JiraCommentCreateHttpRequest, JiraSearchHttpRequest } from './jira-search.request.js';
 
 @Injectable()
 export class ApiService {
@@ -26,6 +26,18 @@ export class ApiService {
 
   async lookupProjects(query: string) {
     return this.jiraService.lookupProjects(query);
+  }
+
+  async searchIssuesByTitle(query: string) {
+    return this.jiraService.searchIssuesByTitle(query);
+  }
+
+  async getIssueByKey(issueKey: string) {
+    return this.jiraService.getIssueByKey(issueKey);
+  }
+
+  async createComment(request: JiraCommentCreateHttpRequest) {
+    return this.jiraService.createComment(request);
   }
 
   async searchJira(request: JiraSearchHttpRequest) {

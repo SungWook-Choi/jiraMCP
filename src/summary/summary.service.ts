@@ -18,7 +18,7 @@ export class SummaryService {
           `   Assignee: ${issue.assignee ?? '(unassigned)'}`,
           `   Project: ${this.formatProject(issue.projectKey, issue.projectName)}`,
           `   Updated: ${issue.updated ?? '(not provided)'}`,
-          ...this.renderConsolePrecautions(issue.precautions),
+          ...this.renderConsoleWeeklyIssues(issue.weeklyIssues),
         ];
 
         return lines.join('\n');
@@ -58,9 +58,9 @@ export class SummaryService {
         '',
         issue.description ?? '(not provided)',
         '',
-        '### Precautions',
+        '### 주간 이슈',
         '',
-        ...this.renderMarkdownPrecautions(issue.precautions),
+        ...this.renderMarkdownWeeklyIssues(issue.weeklyIssues),
       ];
 
       return lines.join('\n');
@@ -93,23 +93,23 @@ export class SummaryService {
     return `${result.issues.length}`;
   }
 
-  private renderConsolePrecautions(precautions: string[]): string[] {
-    if (precautions.length === 0) {
-      return ['   Precautions: (not found)'];
+  private renderConsoleWeeklyIssues(weeklyIssues: string[]): string[] {
+    if (weeklyIssues.length === 0) {
+      return ['   주간 이슈: (not found)'];
     }
 
     return [
-      '   Precautions:',
-      ...precautions.map((precaution) => `     - ${precaution}`),
+      '   주간 이슈:',
+      ...weeklyIssues.map((weeklyIssue) => `     - ${weeklyIssue}`),
     ];
   }
 
-  private renderMarkdownPrecautions(precautions: string[]): string[] {
-    if (precautions.length === 0) {
+  private renderMarkdownWeeklyIssues(weeklyIssues: string[]): string[] {
+    if (weeklyIssues.length === 0) {
       return ['- (not found)'];
     }
 
-    return precautions.map((precaution) => `- ${precaution}`);
+    return weeklyIssues.map((weeklyIssue) => `- ${weeklyIssue}`);
   }
 
   private formatProject(projectKey: string | null, projectName: string | null): string {

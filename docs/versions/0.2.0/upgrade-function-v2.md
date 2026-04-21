@@ -74,7 +74,7 @@
 
 이번 작업은 아래 원칙을 따른다.
 
-1. [docs/work-instruction.md](c:/Users/pn_swchoi/Source/jiraMCP/jiraMCP/docs/work-instruction.md) 범위를 넘는 기능 추가는 금지한다.
+1. [docs/versions/0.1.0/work-instruction.md](c:/Users/pn_swchoi/Source/jiraMCP/jiraMCP/docs/versions/0.1.0/work-instruction.md) 범위를 넘는 기능 추가는 금지한다.
 2. 자유 자연어 해석은 하지 않는다.
 3. CLI는 명시적 선택형 입력 흐름을 유지한다.
 4. 비즈니스 로직은 서비스 계층에 둔다.

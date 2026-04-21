@@ -4,9 +4,15 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 
-import { QueryMode, VALID_PERIODS } from '../query/query.schema.js';
+import { AssigneeMode, QueryMode, VALID_PERIODS } from '../query/query.schema.js';
 import { CliApiClient, JiraSearchApiResponse } from './cli-api.client.js';
-import { CliCollectedQuery } from './cli.types.js';
+import {
+  CliCollectedComment,
+  CliCollectedQuery,
+  CliCommentType,
+  CliIssueSelectionMethod,
+  CliTopLevelAction,
+} from './cli.types.js';
 
 const PERIOD_LABELS: Record<string, string> = {
   this_week: 'this_week  (이번 주)',
@@ -41,7 +47,24 @@ export class CliService {
 
     process.stdout.write(`${this.cliApiClient.describeTarget()}\n`);
 
-    const query = await this.promptForQuery();
+    const readline = createInterface({ input, output });
+
+    try {
+      const action = await this.promptForTopLevelAction(readline);
+
+      if (action === 'query') {
+        await this.runQueryFlow(readline);
+        return;
+      }
+
+      await this.runCommentFlow(readline);
+    } finally {
+      readline.close();
+    }
+  }
+
+  private async runQueryFlow(readline: ReturnType<typeof createInterface>): Promise<void> {
+    const query = await this.promptForQuery(readline);
     let jiraResult: JiraSearchApiResponse;
 
     try {
@@ -73,37 +96,240 @@ export class CliService {
     }
   }
 
-  private async promptForQuery(): Promise<CliCollectedQuery> {
-    const readline = createInterface({ input, output });
+  private async runCommentFlow(readline: ReturnType<typeof createInterface>): Promise<void> {
+    const comment = await this.promptForComment(readline);
+
+    process.stdout.write('\n');
+    process.stdout.write('Comment submission preview:\n');
+    process.stdout.write(`Type: ${comment.commentType}\n`);
+    process.stdout.write(`Issue: [${comment.issueKey}] ${comment.issueSummary}\n`);
+    process.stdout.write(`Selection method: ${comment.issueSelectionMethod}\n`);
+    process.stdout.write('Body:\n');
+    process.stdout.write(`${comment.finalBody}\n`);
+
+    const confirmed = await this.askYesNoQuestion(readline, 'Submit comment? [y/N]: ');
+
+    if (!confirmed) {
+      process.stdout.write('Comment submission cancelled.\n');
+      return;
+    }
 
     try {
-      const mode = await this.promptForMode(readline);
-      const assignee =
-        mode === 'assignee' || mode === 'assignee_project'
-          ? await this.askRequiredQuestion(readline, 'Assignee: ')
-          : undefined;
-      const projectKey =
-        mode === 'project' || mode === 'assignee_project'
-          ? await this.promptForProjectKey(readline)
-          : undefined;
-      const { period, startDate, endDate } = await this.promptForPeriod(readline);
-      const shouldSaveMarkdown = await this.askYesNoQuestion(
-        readline,
-        'Save result as Markdown? [y/N]: ',
-      );
+      const result = await this.cliApiClient.createComment({
+        issueKey: comment.issueKey,
+        body: comment.finalBody,
+      });
 
-      return {
-        mode,
-        assignee,
-        projectKey,
-        period,
-        startDate,
-        endDate,
-        outputFormat: shouldSaveMarkdown ? 'markdown' : 'console',
-      };
-    } finally {
-      readline.close();
+      process.stdout.write(
+        `Comment created successfully: [${result.issueKey}] commentId=${result.commentId}\n`,
+      );
+    } catch (error) {
+      process.stdout.write(`Comment submission failed: ${this.formatErrorMessage(error)}\n`);
     }
+  }
+
+  private async promptForTopLevelAction(
+    readline: ReturnType<typeof createInterface>,
+  ): Promise<CliTopLevelAction> {
+    process.stdout.write('첫 작업을 선택하세요:\n');
+    process.stdout.write('1. 조회\n');
+    process.stdout.write('2. 댓글 입력\n');
+
+    while (true) {
+      const answer = (await readline.question('선택 [1-2, default: 1]: ')).trim();
+
+      if (answer === '' || answer === '1' || answer === '조회') {
+        return 'query';
+      }
+
+      if (answer === '2' || answer === '댓글 입력') {
+        return 'comment';
+      }
+
+      process.stdout.write('1 또는 2를 입력해주세요.\n');
+    }
+  }
+
+  private async promptForComment(
+    readline: ReturnType<typeof createInterface>,
+  ): Promise<CliCollectedComment> {
+    const commentType = await this.promptForCommentType(readline);
+    const issueSelectionMethod = await this.promptForIssueSelectionMethod(readline);
+    const issue =
+      issueSelectionMethod === 'search_title'
+        ? await this.promptForIssueByTitle(readline)
+        : await this.promptForIssueByKey(readline);
+    const rawBody = await this.askRequiredQuestion(readline, '댓글 내용: ');
+    const finalBody = this.buildCommentBody(commentType, rawBody);
+
+    return {
+      commentType,
+      issueSelectionMethod,
+      issueKey: issue.key,
+      issueSummary: issue.summary,
+      rawBody,
+      finalBody,
+    };
+  }
+
+  private async promptForCommentType(
+    readline: ReturnType<typeof createInterface>,
+  ): Promise<CliCommentType> {
+    process.stdout.write('댓글 유형을 선택하세요:\n');
+    process.stdout.write('1. 기본\n');
+    process.stdout.write('2. 주간이슈\n');
+
+    while (true) {
+      const answer = (await readline.question('유형 [1-2, default: 1]: ')).trim();
+
+      if (answer === '' || answer === '1' || answer === '기본') {
+        return 'basic';
+      }
+
+      if (answer === '2' || answer === '주간이슈') {
+        return 'weekly_issue';
+      }
+
+      process.stdout.write('1 또는 2를 입력해주세요.\n');
+    }
+  }
+
+  private async promptForIssueSelectionMethod(
+    readline: ReturnType<typeof createInterface>,
+  ): Promise<CliIssueSelectionMethod> {
+    process.stdout.write('이슈 선택 방식을 고르세요:\n');
+    process.stdout.write('1. 이슈명 검색\n');
+    process.stdout.write('2. 이슈 키 직접 입력\n');
+
+    while (true) {
+      const answer = (await readline.question('방식 [1-2, default: 1]: ')).trim();
+
+      if (answer === '' || answer === '1') {
+        return 'search_title';
+      }
+
+      if (answer === '2') {
+        return 'direct_key';
+      }
+
+      process.stdout.write('1 또는 2를 입력해주세요.\n');
+    }
+  }
+
+  private async promptForIssueByTitle(
+    readline: ReturnType<typeof createInterface>,
+  ): Promise<{ key: string; summary: string }> {
+    while (true) {
+      const titleQuery = await this.askRequiredQuestion(readline, '이슈명 검색어: ');
+
+      try {
+        const candidates = await this.cliApiClient.searchIssuesByTitle(titleQuery);
+
+        if (candidates.length === 0) {
+          process.stdout.write(
+            `"${titleQuery}"와 일치하는 이슈가 없습니다. 다른 검색어를 입력해주세요.\n`,
+          );
+          continue;
+        }
+
+        if (candidates.length === 1) {
+          process.stdout.write(
+            `이슈 자동 선택: [${candidates[0].key}] ${candidates[0].summary}\n`,
+          );
+
+          return {
+            key: candidates[0].key,
+            summary: candidates[0].summary,
+          };
+        }
+
+        process.stdout.write(`검색 결과 ${candidates.length}건:\n`);
+
+        candidates.forEach((candidate, index) => {
+          process.stdout.write(
+            `${index + 1}. [${candidate.key}] ${candidate.summary} (${candidate.status})\n`,
+          );
+        });
+
+        while (true) {
+          const answer = (await readline.question(`이슈 선택 [1-${candidates.length}]: `)).trim();
+          const index = Number.parseInt(answer, 10) - 1;
+
+          if (!Number.isNaN(index) && index >= 0 && index < candidates.length) {
+            return {
+              key: candidates[index].key,
+              summary: candidates[index].summary,
+            };
+          }
+
+          process.stdout.write(`1부터 ${candidates.length} 사이의 숫자를 입력해주세요.\n`);
+        }
+      } catch (error) {
+        process.stdout.write(`이슈 검색 실패: ${this.formatErrorMessage(error)}\n`);
+      }
+    }
+  }
+
+  private async promptForIssueByKey(
+    readline: ReturnType<typeof createInterface>,
+  ): Promise<{ key: string; summary: string }> {
+    while (true) {
+      const issueKey = (await this.askRequiredQuestion(readline, '이슈 키: ')).toUpperCase();
+
+      try {
+        const issue = await this.cliApiClient.getIssueByKey(issueKey);
+        process.stdout.write(`이슈 확인: [${issue.key}] ${issue.summary}\n`);
+
+        return {
+          key: issue.key,
+          summary: issue.summary,
+        };
+      } catch (error) {
+        process.stdout.write(`이슈 확인 실패: ${this.formatErrorMessage(error)}\n`);
+      }
+    }
+  }
+
+  private buildCommentBody(commentType: CliCommentType, rawBody: string): string {
+    if (commentType === 'weekly_issue') {
+      return `[주간 이슈]\n${rawBody}`;
+    }
+
+    return rawBody;
+  }
+
+  private async promptForQuery(
+    readline: ReturnType<typeof createInterface>,
+  ): Promise<CliCollectedQuery> {
+    const mode = await this.promptForMode(readline);
+    const assigneeMode = mode === 'assignee' ? await this.promptForAssigneeMode(readline) : undefined;
+    const assignee =
+      (mode === 'assignee' && assigneeMode !== 'all') || mode === 'assignee_project'
+        ? await this.askRequiredQuestion(readline, 'Assignee: ')
+        : undefined;
+    const projectKey =
+      mode === 'project' || mode === 'assignee_project'
+        ? await this.promptForProjectKey(readline)
+        : undefined;
+    const { period, startDate, endDate } =
+      mode === 'assignee' && assigneeMode === 'all'
+        ? { period: 'this_week' }
+        : await this.promptForPeriod(readline);
+    const shouldSaveMarkdown = await this.askYesNoQuestion(
+      readline,
+      'Save result as Markdown? [y/N]: ',
+    );
+
+    return {
+      mode,
+      assigneeMode,
+      assignee,
+      projectKey,
+      period,
+      startDate,
+      endDate,
+      outputFormat: shouldSaveMarkdown ? 'markdown' : 'console',
+    };
   }
 
   private async promptForMode(
@@ -130,6 +356,28 @@ export class CliService {
       }
 
       process.stdout.write('Please choose 1, 2, 3, assignee, project, or assignee_project.\n');
+    }
+  }
+
+  private async promptForAssigneeMode(
+    readline: ReturnType<typeof createInterface>,
+  ): Promise<AssigneeMode> {
+    process.stdout.write('Assignee query type:\n');
+    process.stdout.write('1. personal\n');
+    process.stdout.write('2. all\n');
+
+    while (true) {
+      const answer = (await readline.question('Type [1-2]: ')).trim().toLowerCase();
+
+      if (answer === '1' || answer === 'personal') {
+        return 'personal';
+      }
+
+      if (answer === '2' || answer === 'all') {
+        return 'all';
+      }
+
+      process.stdout.write('Please choose 1, 2, personal, or all.\n');
     }
   }
 
@@ -210,9 +458,7 @@ export class CliService {
     try {
       candidates = await this.cliApiClient.lookupProjects(nameQuery);
     } catch (error) {
-      process.stdout.write(
-        `프로젝트 검색 실패: ${this.formatErrorMessage(error)}\n`,
-      );
+      process.stdout.write(`프로젝트 검색 실패: ${this.formatErrorMessage(error)}\n`);
       return null;
     }
 

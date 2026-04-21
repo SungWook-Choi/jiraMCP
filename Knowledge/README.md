@@ -23,7 +23,10 @@
 
 ## 현재 원칙
 
-- `main-agent`는 메인 리뷰어 역할만 수행한다.
+- `main-agent`는 메인 리뷰어이며, 작업 할당 전에 작업지시서를 작성하거나 갱신한다.
+- `main-agent`는 작업 항목마다 새 `sub-agent`를 생성하고, 같은 작업지시서 안의 재작업에만 재사용을 허용한다.
 - `sub-agent`는 NestJS 설계 및 구현 담당 역할을 수행한다.
-- 실제 작업은 `sub-agent`가 하고, `main-agent`는 검수와 재작업 지시를 담당한다.
-- 검수는 `AGENTS.md`와 `docs/work-instruction.md`를 기준으로 진행한다.
+- 실제 구현 작업은 `sub-agent`가 하고, `main-agent`는 작업지시서 관리, 검수, 재작업 지시를 담당한다.
+- 작업지시서가 없거나 불완전하면 구현과 검수를 시작하지 않는다.
+- 작업 항목이 바뀌면 기존 `sub-agent`를 다음 작업에 재사용하지 않는다.
+- 검수는 `AGENTS.md`와 `docs/versions/0.1.0/work-instruction.md`를 기준으로 진행한다.

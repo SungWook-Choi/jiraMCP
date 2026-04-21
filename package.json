@@ -1,6 +1,6 @@
 {
   "name": "qwen-jira-mcp",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "CLI, local API server, and MCP entrypoints for the qwen Jira MVP",
   "license": "UNLICENSED",
   "repository": {
@@ -33,7 +33,8 @@
     "server"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "clean": "node scripts/clean-dist.mjs",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
     "prepack": "npm run build",
     "start:api": "node dist/server-entry.js",
     "start:server": "node dist/server-entry.js",

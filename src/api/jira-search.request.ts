@@ -1,9 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { OutputFormat, QueryMode, VALID_PERIODS } from '../query/query.schema.js';
+import { AssigneeMode, OutputFormat, QueryMode, VALID_PERIODS } from '../query/query.schema.js';
 
 export interface JiraSearchHttpRequest {
   mode: QueryMode;
+  assigneeMode?: AssigneeMode;
   assignee?: string;
   projectKey?: string;
   period?: string;
@@ -12,7 +13,13 @@ export interface JiraSearchHttpRequest {
   outputFormat?: OutputFormat;
 }
 
+export interface JiraCommentCreateHttpRequest {
+  issueKey: string;
+  body: string;
+}
+
 const QUERY_MODES: QueryMode[] = ['assignee', 'project', 'assignee_project'];
+const ASSIGNEE_MODES: AssigneeMode[] = ['personal', 'all'];
 const OUTPUT_FORMATS: OutputFormat[] = ['console', 'markdown'];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 
@@ -25,6 +32,7 @@ export function parseJiraSearchRequest(body: unknown): JiraSearchHttpRequest {
 
   const source = body as Record<string, unknown>;
   const mode = parseMode(source.mode);
+  const assigneeMode = parseOptionalAssigneeMode(source.assigneeMode);
   const assignee = parseOptionalString(source.assignee, 'assignee');
   const projectKey = parseOptionalString(source.projectKey, 'projectKey');
   const period = parseOptionalPeriod(source.period);
@@ -32,9 +40,17 @@ export function parseJiraSearchRequest(body: unknown): JiraSearchHttpRequest {
   const endDate = parseOptionalString(source.endDate, 'endDate');
   const outputFormat = parseOptionalOutputFormat(source.outputFormat);
 
-  if ((mode === 'assignee' || mode === 'assignee_project') && !assignee) {
+  if ((mode === 'assignee' && assigneeMode !== 'all') || mode === 'assignee_project') {
+    if (!assignee) {
+      throw new BadRequestException(
+        'assignee is required when mode is assignee (personal) or assignee_project.',
+      );
+    }
+  }
+
+  if (mode !== 'assignee' && assigneeMode) {
     throw new BadRequestException(
-      'assignee is required when mode is assignee or assignee_project.',
+      'assigneeMode is only supported when mode is assignee.',
     );
   }
 
@@ -78,6 +94,7 @@ export function parseJiraSearchRequest(body: unknown): JiraSearchHttpRequest {
 
   return {
     mode,
+    assigneeMode,
     assignee,
     projectKey,
     period,
@@ -85,6 +102,41 @@ export function parseJiraSearchRequest(body: unknown): JiraSearchHttpRequest {
     endDate,
     outputFormat,
   };
+}
+
+export function parseJiraCommentCreateRequest(body: unknown): JiraCommentCreateHttpRequest {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new BadRequestException(
+      'Request body must be a JSON object with issueKey and body fields.',
+    );
+  }
+
+  const source = body as Record<string, unknown>;
+  const issueKey = parseRequiredString(source.issueKey, 'issueKey');
+  const commentBody = parseRequiredString(source.body, 'body');
+
+  return {
+    issueKey,
+    body: commentBody,
+  };
+}
+
+function parseOptionalAssigneeMode(value: unknown): AssigneeMode | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    throw new BadRequestException('assigneeMode must be personal or all.');
+  }
+
+  const normalized = value.trim().toLowerCase() as AssigneeMode;
+
+  if (!ASSIGNEE_MODES.includes(normalized)) {
+    throw new BadRequestException('assigneeMode must be personal or all.');
+  }
+
+  return normalized;
 }
 
 function parseMode(value: unknown): QueryMode {
@@ -161,4 +213,14 @@ function parseOptionalString(value: unknown, fieldName: string): string | undefi
   const normalized = value.trim();
 
   return normalized.length > 0 ? normalized : undefined;
+}
+
+function parseRequiredString(value: unknown, fieldName: string): string {
+  const normalized = parseOptionalString(value, fieldName);
+
+  if (!normalized) {
+    throw new BadRequestException(`${fieldName} is required.`);
+  }
+
+  return normalized;
 }

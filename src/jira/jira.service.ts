@@ -14,6 +14,24 @@ export interface JiraProjectCandidate {
   name: string;
 }
 
+export interface JiraIssueCandidate {
+  key: string;
+  summary: string;
+  status: string;
+  projectKey: string | null;
+  projectName: string | null;
+}
+
+export interface JiraCommentCreateRequest {
+  issueKey: string;
+  body: string;
+}
+
+export interface JiraCommentCreateResponse {
+  issueKey: string;
+  commentId: string;
+}
+
 export interface JiraSearchResult {
   issues: Array<{
     key: string;
@@ -25,7 +43,7 @@ export interface JiraSearchResult {
     updated: string | null;
     description: string | null;
     comments: string[];
-    precautions: string[];
+    weeklyIssues: string[];
   }>;
   request: JiraSearchRequest;
   total: number;
@@ -34,6 +52,10 @@ export interface JiraSearchResult {
 interface JiraSearchResponse {
   issues?: JiraIssueResponse[];
   total?: number;
+}
+
+interface JiraCommentResponse {
+  id?: string;
 }
 
 interface JiraUserSearchResponseItem {
@@ -82,6 +104,7 @@ interface JiraIssueResponse {
 }
 
 const JIRA_SEARCH_PATH = '/rest/api/3/search/jql';
+const JIRA_ISSUE_PATH = '/rest/api/3/issue';
 const JIRA_USER_SEARCH_PATH = '/rest/api/3/user/search';
 const JIRA_PROJECT_SEARCH_PATH = '/rest/api/3/project/search';
 const CHANGELOG_TRACKED_FIELDS = new Set([
@@ -103,8 +126,11 @@ const JIRA_SEARCH_FIELDS = [
   'description',
   'comment',
 ];
+const JIRA_ISSUE_LOOKUP_FIELDS = ['summary', 'status', 'project'];
 const JIRA_MAX_RESULTS = 20;
-const PRECAUTION_TAG = '[주의사항]';
+const JIRA_ISSUE_LOOKUP_MAX_RESULTS = 10;
+const WEEKLY_ISSUE_TAG = '[주간 이슈]';
+const ASSIGNEE_ALL_EXCLUDED_STATUSES = ['해야 할 일', 'To Do', '완료', 'Done'] as const;
 
 @Injectable()
 export class JiraService {
@@ -194,6 +220,12 @@ export class JiraService {
       clauses.push(periodClause);
     }
 
+    const excludedStatusesClause = this.buildExcludedStatusesClause(query);
+
+    if (excludedStatusesClause) {
+      clauses.push(excludedStatusesClause);
+    }
+
     if (clauses.length === 0) {
       return 'ORDER BY updated DESC';
     }
@@ -248,6 +280,14 @@ export class JiraService {
     return `((${updatedClause}) OR (${createdClause}) OR (${statusChangedClause}))`;
   }
 
+  private buildExcludedStatusesClause(query: QuerySchema): string | null {
+    if (query.mode !== 'assignee' || query.assigneeMode !== 'all') {
+      return null;
+    }
+
+    return `status not in (${ASSIGNEE_ALL_EXCLUDED_STATUSES.map((status) => this.quoteValue(status)).join(', ')})`;
+  }
+
   async lookupProjects(query: string): Promise<JiraProjectCandidate[]> {
     const settings = this.getSettings();
     const url = this.buildProjectSearchUrl(settings.baseUrl, query);
@@ -274,6 +314,88 @@ export class JiraService {
       .filter((p) => p.key.length > 0);
   }
 
+  async searchIssuesByTitle(query: string): Promise<JiraIssueCandidate[]> {
+    const settings = this.getSettings();
+    const response = await fetch(this.buildSearchUrl(settings.baseUrl), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: this.createAuthorizationHeader(settings),
+      },
+      body: JSON.stringify({
+        jql: `summary ~ ${this.quoteValue(query)} ORDER BY updated DESC`,
+        fields: JIRA_ISSUE_LOOKUP_FIELDS,
+        maxResults: JIRA_ISSUE_LOOKUP_MAX_RESULTS,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await this.readResponseBody(response);
+
+      throw new Error(
+        `Issue title search failed (${response.status} ${response.statusText}): ${errorBody}`,
+      );
+    }
+
+    const payload = (await response.json()) as JiraSearchResponse;
+
+    return (payload.issues ?? []).map((issue) => this.normalizeIssueCandidate(issue));
+  }
+
+  async getIssueByKey(issueKey: string): Promise<JiraIssueCandidate> {
+    const settings = this.getSettings();
+    const response = await fetch(this.buildIssueUrl(settings.baseUrl, issueKey), {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: this.createAuthorizationHeader(settings),
+      },
+    });
+
+    if (!response.ok) {
+      const errorBody = await this.readResponseBody(response);
+
+      throw new Error(
+        `Issue lookup failed for "${issueKey}" (${response.status} ${response.statusText}): ${errorBody}`,
+      );
+    }
+
+    const payload = (await response.json()) as JiraIssueResponse;
+
+    return this.normalizeIssueCandidate(payload);
+  }
+
+  async createComment(request: JiraCommentCreateRequest): Promise<JiraCommentCreateResponse> {
+    const settings = this.getSettings();
+    const response = await fetch(this.buildIssueCommentUrl(settings.baseUrl, request.issueKey), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: this.createAuthorizationHeader(settings),
+      },
+      body: JSON.stringify({
+        body: this.createCommentBodyDocument(request.body),
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await this.readResponseBody(response);
+
+      throw new Error(
+        `Comment create failed for "${request.issueKey}" (${response.status} ${response.statusText}): ${errorBody}`,
+      );
+    }
+
+    const payload = (await response.json()) as JiraCommentResponse;
+
+    return {
+      issueKey: request.issueKey,
+      commentId: payload.id?.trim() || '(unknown comment id)',
+    };
+  }
+
   private buildProjectSearchUrl(baseUrl: string, query: string): string {
     const normalizedBaseUrl = this.normalizeBaseUrl(baseUrl);
     const url = new URL(`${normalizedBaseUrl}${JIRA_PROJECT_SEARCH_PATH}`);
@@ -282,6 +404,21 @@ export class JiraService {
     url.searchParams.set('maxResults', '20');
 
     return url.toString();
+  }
+
+  private buildIssueUrl(baseUrl: string, issueKey: string): string {
+    const normalizedBaseUrl = this.normalizeBaseUrl(baseUrl);
+    const url = new URL(`${normalizedBaseUrl}${JIRA_ISSUE_PATH}/${encodeURIComponent(issueKey)}`);
+
+    url.searchParams.set('fields', JIRA_ISSUE_LOOKUP_FIELDS.join(','));
+
+    return url.toString();
+  }
+
+  private buildIssueCommentUrl(baseUrl: string, issueKey: string): string {
+    const normalizedBaseUrl = this.normalizeBaseUrl(baseUrl);
+
+    return `${normalizedBaseUrl}${JIRA_ISSUE_PATH}/${encodeURIComponent(issueKey)}/comment`;
   }
 
   private async buildAssigneeClause(
@@ -497,7 +634,7 @@ export class JiraService {
     const comments = (issue.fields?.comment?.comments ?? [])
       .map((comment) => this.extractText(comment.body))
       .filter((commentText) => commentText.length > 0);
-    const precautions = this.extractPrecautions([description, ...comments]);
+    const weeklyIssues = this.extractWeeklyIssues(comments);
 
     return {
       key: issue.key ?? '(unknown issue key)',
@@ -509,29 +646,35 @@ export class JiraService {
       updated: issue.fields?.updated ?? null,
       description: description || null,
       comments,
-      precautions,
+      weeklyIssues,
     };
   }
 
-  private extractPrecautions(sourceTexts: string[]): string[] {
+  private normalizeIssueCandidate(issue: JiraIssueResponse): JiraIssueCandidate {
+    return {
+      key: issue.key?.trim() || '(unknown issue key)',
+      summary: issue.fields?.summary?.trim() || '(no summary)',
+      status: issue.fields?.status?.name?.trim() || '(unknown status)',
+      projectKey: issue.fields?.project?.key?.trim() || null,
+      projectName: issue.fields?.project?.name?.trim() || null,
+    };
+  }
+
+  private extractWeeklyIssues(commentTexts: string[]): string[] {
     const collected: string[] = [];
 
-    for (const sourceText of sourceTexts) {
-      if (!sourceText) {
-        continue;
-      }
-
-      const normalizedSource = this.normalizeWhitespace(sourceText);
+    for (const commentText of commentTexts) {
+      const normalizedSource = this.normalizeWhitespace(commentText);
       let searchIndex = 0;
 
       while (searchIndex < normalizedSource.length) {
-        const startIndex = normalizedSource.indexOf(PRECAUTION_TAG, searchIndex);
+        const startIndex = normalizedSource.indexOf(WEEKLY_ISSUE_TAG, searchIndex);
 
         if (startIndex < 0) {
           break;
         }
 
-        const contentStartIndex = startIndex + PRECAUTION_TAG.length;
+        const contentStartIndex = startIndex + WEEKLY_ISSUE_TAG.length;
         const remainingText = normalizedSource.slice(contentStartIndex);
         const nextSectionIndex = remainingText.search(/\n\s*\[[^\]\n]+\]/u);
         const section =
@@ -539,7 +682,7 @@ export class JiraService {
             ? remainingText.slice(0, nextSectionIndex)
             : remainingText;
 
-        collected.push(...this.splitPrecautionSection(section));
+        collected.push(...this.splitWeeklyIssueSection(section));
         searchIndex = contentStartIndex;
       }
     }
@@ -547,7 +690,7 @@ export class JiraService {
     return this.uniqueValues(collected);
   }
 
-  private splitPrecautionSection(section: string): string[] {
+  private splitWeeklyIssueSection(section: string): string[] {
     const normalizedSection = section.trim().replace(/^[:\-]\s*/u, '').trim();
 
     if (!normalizedSection) {
@@ -627,6 +770,35 @@ export class JiraService {
     }
 
     return combined;
+  }
+
+  private createCommentBodyDocument(body: string): Record<string, unknown> {
+    const lines = body.split('\n');
+    const content: Array<Record<string, unknown>> = [];
+
+    lines.forEach((line, index) => {
+      if (line.length > 0) {
+        content.push({
+          type: 'text',
+          text: line,
+        });
+      }
+
+      if (index < lines.length - 1) {
+        content.push({ type: 'hardBreak' });
+      }
+    });
+
+    return {
+      type: 'doc',
+      version: 1,
+      content: [
+        {
+          type: 'paragraph',
+          content,
+        },
+      ],
+    };
   }
 
   private extractTextFromAttrs(attrs?: Record<string, unknown>): string {

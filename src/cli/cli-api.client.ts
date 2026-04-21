@@ -1,10 +1,18 @@
 import { Injectable } from '@nestjs/common';
 
-import { JiraProjectCandidate, JiraSearchRequest, JiraSearchResult } from '../jira/jira.service.js';
-import { QueryMode, QuerySchema } from '../query/query.schema.js';
+import {
+  JiraCommentCreateRequest,
+  JiraCommentCreateResponse,
+  JiraIssueCandidate,
+  JiraProjectCandidate,
+  JiraSearchRequest,
+  JiraSearchResult,
+} from '../jira/jira.service.js';
+import { AssigneeMode, QueryMode, QuerySchema } from '../query/query.schema.js';
 
 interface JiraSearchApiRequest {
   mode: QueryMode;
+  assigneeMode?: AssigneeMode;
   assignee?: string;
   projectKey?: string;
   period?: string;
@@ -27,6 +35,14 @@ export interface JiraSearchApiResponse {
   consoleRendered: string;
   markdownRendered: string;
   rendered: string;
+}
+
+export interface JiraIssueLookupByKeyResponse {
+  key: string;
+  summary: string;
+  status: string;
+  projectKey: string | null;
+  projectName: string | null;
 }
 
 const DEFAULT_LOCAL_SERVER_BASE_URL = 'http://127.0.0.1:3000';
@@ -65,6 +81,37 @@ export class CliApiClient {
     });
 
     return (await response.json()) as JiraProjectCandidate[];
+  }
+
+  async searchIssuesByTitle(query: string): Promise<JiraIssueCandidate[]> {
+    const encodedQuery = encodeURIComponent(query);
+    const response = await this.fetchFromServer(`/jira/issues?query=${encodedQuery}`, {
+      method: 'GET',
+    });
+
+    return (await response.json()) as JiraIssueCandidate[];
+  }
+
+  async getIssueByKey(issueKey: string): Promise<JiraIssueLookupByKeyResponse> {
+    const encodedKey = encodeURIComponent(issueKey);
+    const response = await this.fetchFromServer(`/jira/issues/${encodedKey}`, {
+      method: 'GET',
+    });
+
+    return (await response.json()) as JiraIssueLookupByKeyResponse;
+  }
+
+  async createComment(request: JiraCommentCreateRequest): Promise<JiraCommentCreateResponse> {
+    const response = await this.fetchFromServer('/jira/comments', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+
+    return (await response.json()) as JiraCommentCreateResponse;
   }
 
   private async fetchFromServer(path: string, init: RequestInit): Promise<Response> {
