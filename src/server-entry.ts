@@ -11,17 +11,22 @@ import {
   writeServerRuntimeState,
 } from './bootstrap/server-runtime.js';
 import { loadEnvFile } from './config/env-loader.js';
+import {
+  readQwenJiraUserConfig,
+  resolveQwenJiraServerPort,
+} from './config/qwen-jira-user-config.js';
 
 async function bootstrap() {
   const runtimePaths = getServerRuntimePathsFromEnv();
   loadEnvFile();
   logLifecycle('Server starting.', runtimePaths !== null);
+  const userConfig = await readQwenJiraUserConfig();
 
   const app = await NestFactory.create(AppModule, {
     logger: ['log', 'warn', 'error'],
   });
   const host = parseHost(process.env.HOST);
-  const port = parsePort(process.env.PORT);
+  const port = resolveQwenJiraServerPort(process.env.PORT, userConfig);
   const serverAddress = formatServerAddress(host, port) ?? `http://${host}:${port}`;
   let shuttingDown = false;
 
@@ -83,16 +88,6 @@ async function bootstrap() {
   }
 
   logLifecycle(`Listening on ${serverAddress}.`, runtimePaths !== null);
-}
-
-function parsePort(value?: string): number {
-  const parsed = Number.parseInt(value ?? '3000', 10);
-
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    return 3000;
-  }
-
-  return parsed;
 }
 
 function parseHost(value?: string): string {

@@ -18,13 +18,15 @@ JIRA_EMAIL=you@yourcompany.com
 JIRA_API_TOKEN=your_api_token_here
 JIRA_PROJECT_KEY=ABC          # optional
 JIRA_DEFAULT_PERIOD=this_week # optional
-QWEN_JIRA_API_BASE_URL=http://127.0.0.1:3000 # optional, default value
+PORT=3000                     # optional, server port override
+QWEN_JIRA_API_BASE_URL=http://127.0.0.1:3000 # optional, explicit CLI server URL override
 ```
 
 - `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` 은 필수입니다.
 - `JIRA_PROJECT_KEY`: 기본 조회 프로젝트 키 (생략 가능)
 - `JIRA_DEFAULT_PERIOD`: 기본 조회 기간 (생략 시 `this_week`)
-- `QWEN_JIRA_API_BASE_URL`: CLI가 호출하는 로컬 서버 주소 (생략 시 `http://127.0.0.1:3000`)
+- `PORT`: `qwen-jira-server` 실행 포트 우선순위에서 가장 먼저 사용됩니다.
+- `QWEN_JIRA_API_BASE_URL`: CLI가 호출하는 로컬 서버 주소를 직접 지정합니다. 생략하면 `LOCAL_SERVER_API_BASE_URL`, 사용자 설정 파일의 `serverPort`, 기본값 `http://127.0.0.1:3000` 순서로 결정됩니다.
 
 ## Usage
 
@@ -45,7 +47,7 @@ qwen-jira-server status
 qwen-jira-server stop
 ```
 
-서버가 정상 기동되면 `http://127.0.0.1:3000` 에서 대기합니다.
+서버는 `PORT` 환경변수, 사용자 설정 파일의 `serverPort`, 기본값 `3000` 순서로 포트를 정합니다. 실행 후 상태 파일과 시작 로그는 실제 선택된 포트를 반영합니다.
 
 ### 2. CLI 실행
 
@@ -55,7 +57,18 @@ qwen-jira-server stop
 qwen-jira
 ```
 
-### 3. MCP 실행
+### 3. 설정 CLI 실행
+
+사용자 설정 파일은 직접 편집하지 않고 `qwen-jira-config`로 관리합니다.
+
+```bash
+qwen-jira-config
+```
+
+설정 파일 경로는 `<사용자 홈>/.qwen-jira-mcp/config.json` 입니다.
+설정 파일 키는 `serverPort`, `assigneeAllInclude`, `resultOutputDir` 세 개만 사용합니다.
+
+### 4. MCP 실행
 
 > **주의:** 현재 MCP 서버는 scaffold 상태이며, 실제 Jira 조회 기능은 미구현입니다.
 > `qwen-jira-mcp`를 실행하면 서버 descriptor만 반환하고 실제 데이터 조회는 동작하지 않습니다.
@@ -69,25 +82,29 @@ qwen-jira-mcp
 
 ```bash
 qwen-jira-server
+qwen-jira-config
 qwen-jira
 qwen-jira-server status
 qwen-jira-server stop
 ```
 
-CLI는 기본적으로 `http://127.0.0.1:3000` 의 로컬 서버에 요청합니다. 서버 주소를 변경하려면 `QWEN_JIRA_API_BASE_URL` 환경변수를 설정합니다.
+CLI는 기본적으로 사용자 설정 파일의 `serverPort`를 읽어 `http://127.0.0.1:<serverPort>` 로 요청합니다. 설정 파일이 없으면 `http://127.0.0.1:3000` 을 사용합니다. `QWEN_JIRA_API_BASE_URL` 또는 `LOCAL_SERVER_API_BASE_URL` 환경변수가 있으면 그 값을 가장 먼저 사용합니다.
 
 CLI 첫 진입에서는 `조회` 또는 `댓글 입력`을 선택합니다.
 
-- `조회`: 기존 Jira 조회 흐름을 그대로 사용합니다.
-- `댓글 입력`: `기본` 또는 `주간이슈`를 고른 뒤, `이슈명 검색` 또는 `이슈 키 직접 입력`으로 대상을 선택하고 댓글을 전송합니다.
+- `조회`: `담당자 기준 조회 (assignee)`, `프로젝트 기준 조회 (project)`, `담당자+프로젝트 조회 (assignee_project)` 중 하나를 선택합니다.
+- `댓글 입력`: `기본 (basic)` 또는 `주간이슈 (weekly_issue)`를 고른 뒤, `이슈명 검색 (search_title)` 또는 `이슈 키 직접 입력 (direct_key)`으로 대상을 선택하고 댓글을 전송합니다.
 - `주간이슈`: 제출 본문 앞에 `[주간 이슈]` 와 줄바꿈이 자동으로 추가됩니다.
 - 댓글 전송 전 최종 확인 단계가 있습니다.
 
-`assignee` 조회를 선택하면 CLI가 `personal` / `all` 을 한 번 더 묻습니다.
+`담당자 기준 조회 (assignee)`를 선택하면 CLI가 `내 담당자만 (personal)` / `전체 포함 (all)` 을 한 번 더 묻습니다.
 
 - `personal`: 기존과 동일하게 담당자 입력 후 기간을 선택합니다.
-- `all`: 담당자 입력과 기간 선택을 건너뛰고 즉시 `this_week` 기준으로 조회합니다.
+- `all`: 사용자 설정 파일의 `assigneeAllInclude` 목록만 대상으로 조회합니다.
+- `all` 조회에서 설정이 없거나 목록이 비어 있으면 `qwen-jira-config`로 먼저 설정하라는 오류를 반환합니다.
 - `all` 조회에서는 상태 `해야 할 일`, `To Do`, `완료`, `Done` 이 JQL에서 제외됩니다.
+
+Markdown으로 결과를 저장하면 사용자 설정 파일의 `resultOutputDir` 값을 사용합니다. 설정이 없으면 기존 기본값인 `./output` 으로 저장하고, 필요한 폴더는 자동 생성합니다.
 
 ## Structure
 

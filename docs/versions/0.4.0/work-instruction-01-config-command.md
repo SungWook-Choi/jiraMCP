@@ -33,6 +33,28 @@
 2. `assignee all` 포함 대상 담당자 목록
 3. 결과 출력 폴더 경로
 
+## 설정 파일 기준
+
+이번 작업에서 설정 파일 위치와 키 이름은 아래로 확정한다.
+
+1. 설정 파일 위치: `<사용자 홈>/.qwen-jira-mcp/config.json`
+2. 설정 파일은 `UTF-8` JSON 파일로 저장한다.
+3. 설정 파일의 부모 디렉터리가 없으면 자동 생성한다.
+4. 저장 키는 아래 이름만 사용한다.
+
+```json
+{
+  "serverPort": 3000,
+  "assigneeAllInclude": [
+    "Alice Kim",
+    "Bob Lee"
+  ],
+  "resultOutputDir": "./output"
+}
+```
+
+`qwen-jira-config`는 이번 범위에서 위 세 키 외의 값을 묻거나 저장하지 않는다.
+
 ## 예시 UX
 
 ```text
@@ -59,6 +81,8 @@ Y
 2. 질문형 입력 흐름 구현
 3. 설정 파일 생성/수정/저장
 4. 잘못된 입력에 대한 기본 검증
+5. `package.json`의 `bin` 항목에 `qwen-jira-config` 추가
+6. 설정 파일 경로와 명령 사용법 README 반영
 
 ## 제외 범위
 
@@ -82,6 +106,8 @@ Y
 3. 설정 파일이 있을 때 수정 흐름이 동작한다.
 4. 세 항목에 대해 `Y / N` 질문과 입력이 가능하다.
 5. 최종 저장 확인 단계가 있다.
+6. 저장 결과가 `<사용자 홈>/.qwen-jira-mcp/config.json`에 `UTF-8` JSON으로 기록된다.
+7. `npm run build`와 `npm run typecheck`가 통과한다.
 
 ## 검수 기준
 

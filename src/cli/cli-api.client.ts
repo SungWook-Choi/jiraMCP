@@ -8,6 +8,10 @@ import {
   JiraSearchRequest,
   JiraSearchResult,
 } from '../jira/jira.service.js';
+import {
+  readQwenJiraUserConfig,
+  resolveQwenJiraLocalServerBaseUrl,
+} from '../config/qwen-jira-user-config.js';
 import { AssigneeMode, QueryMode, QuerySchema } from '../query/query.schema.js';
 
 interface JiraSearchApiRequest {
@@ -45,12 +49,10 @@ export interface JiraIssueLookupByKeyResponse {
   projectName: string | null;
 }
 
-const DEFAULT_LOCAL_SERVER_BASE_URL = 'http://127.0.0.1:3000';
-
 @Injectable()
 export class CliApiClient {
-  describeTarget(): string {
-    return `Local server API: ${this.getBaseUrl()}`;
+  async describeTarget(): Promise<string> {
+    return `로컬 서버 API: ${await this.getBaseUrl()}`;
   }
 
   async getHealthStatus(): Promise<HealthStatusResponse> {
@@ -115,14 +117,15 @@ export class CliApiClient {
   }
 
   private async fetchFromServer(path: string, init: RequestInit): Promise<Response> {
-    const url = `${this.getBaseUrl()}${path}`;
+    const baseUrl = await this.getBaseUrl();
+    const url = `${baseUrl}${path}`;
     let response: Response;
 
     try {
       response = await fetch(url, init);
     } catch {
       throw new Error(
-        `Local server is unavailable at ${this.getBaseUrl()}. Start the API server and try again.`,
+        `로컬 서버에 연결할 수 없습니다: ${baseUrl}. API 서버를 먼저 시작한 뒤 다시 시도해주세요.`,
       );
     }
 
@@ -130,26 +133,26 @@ export class CliApiClient {
       const errorBody = await this.readResponseBody(response);
 
       throw new Error(
-        `Local server request failed (${response.status} ${response.statusText}): ${errorBody}`,
+        `로컬 서버 요청 실패 (${response.status} ${response.statusText}): ${errorBody}`,
       );
     }
 
     return response;
   }
 
-  private getBaseUrl(): string {
+  private async getBaseUrl(): Promise<string> {
     const configured =
       process.env.QWEN_JIRA_API_BASE_URL?.trim() ||
-      process.env.LOCAL_SERVER_API_BASE_URL?.trim() ||
-      DEFAULT_LOCAL_SERVER_BASE_URL;
+      process.env.LOCAL_SERVER_API_BASE_URL?.trim();
+    const baseUrl = configured || resolveQwenJiraLocalServerBaseUrl(await readQwenJiraUserConfig());
 
     try {
-      const url = new URL(configured);
+      const url = new URL(baseUrl);
 
       return url.origin.replace(/\/+$/u, '');
     } catch {
       throw new Error(
-        `Local server API base URL is invalid: ${configured}. Set QWEN_JIRA_API_BASE_URL to a valid http(s) URL.`,
+        `로컬 서버 API 기본 URL이 올바르지 않습니다: ${baseUrl}. QWEN_JIRA_API_BASE_URL에 유효한 http(s) URL을 설정해주세요.`,
       );
     }
   }
@@ -157,6 +160,6 @@ export class CliApiClient {
   private async readResponseBody(response: Response): Promise<string> {
     const text = (await response.text()).trim();
 
-    return text.length > 0 ? text : 'No response body.';
+    return text.length > 0 ? text : '응답 본문이 없습니다.';
   }
 }

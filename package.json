@@ -1,6 +1,6 @@
 {
   "name": "qwen-jira-mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "CLI, local API server, and MCP entrypoints for the qwen Jira MVP",
   "license": "UNLICENSED",
   "repository": {
@@ -19,6 +19,7 @@
   ],
   "bin": {
     "qwen-jira": "bin/qwen-jira.js",
+    "qwen-jira-config": "bin/qwen-jira-config.js",
     "qwen-jira-server": "bin/qwen-jira-server.js",
     "qwen-jira-mcp": "bin/qwen-jira-mcp.js"
   },

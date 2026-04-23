@@ -23,7 +23,7 @@ export class ApiController {
   @Get('jira/issues')
   async searchIssuesByTitle(@Query('query') query: string) {
     if (!query || query.trim().length === 0) {
-      throw new BadRequestException('query parameter is required.');
+      throw new BadRequestException('query 매개변수가 필요합니다.');
     }
 
     return this.apiService.searchIssuesByTitle(query.trim());
@@ -32,7 +32,7 @@ export class ApiController {
   @Get('jira/issues/:issueKey')
   async getIssueByKey(@Param('issueKey') issueKey: string) {
     if (!issueKey || issueKey.trim().length === 0) {
-      throw new BadRequestException('issueKey parameter is required.');
+      throw new BadRequestException('issueKey 매개변수가 필요합니다.');
     }
 
     return this.apiService.getIssueByKey(issueKey.trim());
@@ -41,7 +41,7 @@ export class ApiController {
   @Get('jira/projects')
   async lookupProjects(@Query('query') query: string) {
     if (!query || query.trim().length === 0) {
-      throw new BadRequestException('query parameter is required.');
+      throw new BadRequestException('query 매개변수가 필요합니다.');
     }
 
     return this.apiService.lookupProjects(query.trim());

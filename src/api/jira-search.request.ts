@@ -26,7 +26,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 export function parseJiraSearchRequest(body: unknown): JiraSearchHttpRequest {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new BadRequestException(
-      'Request body must be a JSON object with mode and optional assignee/projectKey fields.',
+      '요청 본문은 mode와 선택적 assignee/projectKey 필드를 포함한 JSON 객체여야 합니다.',
     );
   }
 
@@ -43,51 +43,51 @@ export function parseJiraSearchRequest(body: unknown): JiraSearchHttpRequest {
   if ((mode === 'assignee' && assigneeMode !== 'all') || mode === 'assignee_project') {
     if (!assignee) {
       throw new BadRequestException(
-        'assignee is required when mode is assignee (personal) or assignee_project.',
+        'mode가 assignee (personal) 또는 assignee_project일 때 assignee가 필요합니다.',
       );
     }
   }
 
   if (mode !== 'assignee' && assigneeMode) {
     throw new BadRequestException(
-      'assigneeMode is only supported when mode is assignee.',
+      'assigneeMode는 mode가 assignee일 때만 사용할 수 있습니다.',
     );
   }
 
   if ((mode === 'project' || mode === 'assignee_project') && !projectKey) {
     throw new BadRequestException(
-      'projectKey is required when mode is project or assignee_project.',
+      'mode가 project 또는 assignee_project일 때 projectKey가 필요합니다.',
     );
   }
 
   if (period === 'custom_range') {
     if (!startDate) {
       throw new BadRequestException(
-        'startDate is required when period is custom_range. Use YYYY-MM-DD format.',
+        'period가 custom_range일 때는 startDate가 필요합니다. YYYY-MM-DD 형식을 사용해주세요.',
       );
     }
 
     if (!endDate) {
       throw new BadRequestException(
-        'endDate is required when period is custom_range. Use YYYY-MM-DD format.',
+        'period가 custom_range일 때는 endDate가 필요합니다. YYYY-MM-DD 형식을 사용해주세요.',
       );
     }
 
     if (!DATE_PATTERN.test(startDate)) {
       throw new BadRequestException(
-        `startDate must be in YYYY-MM-DD format. Received: "${startDate}".`,
+        `startDate는 YYYY-MM-DD 형식이어야 합니다. 입력값: "${startDate}".`,
       );
     }
 
     if (!DATE_PATTERN.test(endDate)) {
       throw new BadRequestException(
-        `endDate must be in YYYY-MM-DD format. Received: "${endDate}".`,
+        `endDate는 YYYY-MM-DD 형식이어야 합니다. 입력값: "${endDate}".`,
       );
     }
 
     if (startDate > endDate) {
       throw new BadRequestException(
-        `startDate (${startDate}) must not be after endDate (${endDate}).`,
+        `startDate (${startDate})는 endDate (${endDate})보다 늦을 수 없습니다.`,
       );
     }
   }
@@ -107,7 +107,7 @@ export function parseJiraSearchRequest(body: unknown): JiraSearchHttpRequest {
 export function parseJiraCommentCreateRequest(body: unknown): JiraCommentCreateHttpRequest {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new BadRequestException(
-      'Request body must be a JSON object with issueKey and body fields.',
+      '요청 본문은 issueKey와 body 필드를 포함한 JSON 객체여야 합니다.',
     );
   }
 
@@ -127,13 +127,13 @@ function parseOptionalAssigneeMode(value: unknown): AssigneeMode | undefined {
   }
 
   if (typeof value !== 'string') {
-    throw new BadRequestException('assigneeMode must be personal or all.');
+    throw new BadRequestException('assigneeMode는 personal 또는 all이어야 합니다.');
   }
 
   const normalized = value.trim().toLowerCase() as AssigneeMode;
 
   if (!ASSIGNEE_MODES.includes(normalized)) {
-    throw new BadRequestException('assigneeMode must be personal or all.');
+    throw new BadRequestException('assigneeMode는 personal 또는 all이어야 합니다.');
   }
 
   return normalized;
@@ -142,7 +142,7 @@ function parseOptionalAssigneeMode(value: unknown): AssigneeMode | undefined {
 function parseMode(value: unknown): QueryMode {
   if (typeof value !== 'string') {
     throw new BadRequestException(
-      'mode must be one of: assignee, project, assignee_project.',
+      'mode는 다음 중 하나여야 합니다: assignee, project, assignee_project.',
     );
   }
 
@@ -150,7 +150,7 @@ function parseMode(value: unknown): QueryMode {
 
   if (!QUERY_MODES.includes(normalized)) {
     throw new BadRequestException(
-      'mode must be one of: assignee, project, assignee_project.',
+      'mode는 다음 중 하나여야 합니다: assignee, project, assignee_project.',
     );
   }
 
@@ -164,7 +164,7 @@ function parseOptionalPeriod(value: unknown): string | undefined {
 
   if (typeof value !== 'string') {
     throw new BadRequestException(
-      `period must be one of: ${VALID_PERIODS.join(', ')}.`,
+      `period는 다음 중 하나여야 합니다: ${VALID_PERIODS.join(', ')}.`,
     );
   }
 
@@ -176,7 +176,7 @@ function parseOptionalPeriod(value: unknown): string | undefined {
 
   if (!VALID_PERIODS.includes(normalized as (typeof VALID_PERIODS)[number])) {
     throw new BadRequestException(
-      `period must be one of: ${VALID_PERIODS.join(', ')}. Received: "${normalized}".`,
+      `period는 다음 중 하나여야 합니다: ${VALID_PERIODS.join(', ')}. 입력값: "${normalized}".`,
     );
   }
 
@@ -189,13 +189,13 @@ function parseOptionalOutputFormat(value: unknown): OutputFormat | undefined {
   }
 
   if (typeof value !== 'string') {
-    throw new BadRequestException('outputFormat must be console or markdown.');
+    throw new BadRequestException('outputFormat은 console 또는 markdown이어야 합니다.');
   }
 
   const normalized = value.trim() as OutputFormat;
 
   if (!OUTPUT_FORMATS.includes(normalized)) {
-    throw new BadRequestException('outputFormat must be console or markdown.');
+    throw new BadRequestException('outputFormat은 console 또는 markdown이어야 합니다.');
   }
 
   return normalized;
@@ -207,7 +207,7 @@ function parseOptionalString(value: unknown, fieldName: string): string | undefi
   }
 
   if (typeof value !== 'string') {
-    throw new BadRequestException(`${fieldName} must be a string.`);
+    throw new BadRequestException(`${fieldName}은 문자열이어야 합니다.`);
   }
 
   const normalized = value.trim();
@@ -219,7 +219,7 @@ function parseRequiredString(value: unknown, fieldName: string): string {
   const normalized = parseOptionalString(value, fieldName);
 
   if (!normalized) {
-    throw new BadRequestException(`${fieldName} is required.`);
+    throw new BadRequestException(`${fieldName}이 필요합니다.`);
   }
 
   return normalized;

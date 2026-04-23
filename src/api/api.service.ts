@@ -1,8 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
 import { getMissingJiraEnv } from '../config/jira-settings.js';
+import {
+  readQwenJiraUserConfig,
+  resolveQwenJiraAssigneeAllInclude,
+} from '../config/qwen-jira-user-config.js';
 import { JiraService } from '../jira/jira.service.js';
-import { QueryService } from '../query/query.service.js';
+import { AssigneeAllConfigError, QueryService } from '../query/query.service.js';
+import { QuerySchema } from '../query/query.schema.js';
 import { SummaryService } from '../summary/summary.service.js';
 import { JiraCommentCreateHttpRequest, JiraSearchHttpRequest } from './jira-search.request.js';
 
@@ -41,7 +46,22 @@ export class ApiService {
   }
 
   async searchJira(request: JiraSearchHttpRequest) {
-    const query = this.queryService.createQuery(request);
+    const userConfig = await readQwenJiraUserConfig();
+
+    let query: QuerySchema;
+
+    try {
+      query = this.queryService.createQuery(request, {
+        assigneeAllInclude: resolveQwenJiraAssigneeAllInclude(userConfig),
+      });
+    } catch (error) {
+      if (error instanceof AssigneeAllConfigError) {
+        throw new BadRequestException(error.message);
+      }
+
+      throw error;
+    }
+
     const result = await this.jiraService.searchIssues(query);
     const consoleRendered = this.summaryService.renderConsoleIssues(result.issues);
     const markdownRendered = this.summaryService.renderMarkdownResult(query, result);
