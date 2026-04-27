@@ -7,10 +7,10 @@ import {
   getQwenJiraUserConfigPath,
   QwenJiraUserConfig,
   readQwenJiraUserConfig,
+  WEEKLY_REPORT_WEEKDAYS,
+  WeeklyReportWeekday,
   writeQwenJiraUserConfig,
 } from '../config/qwen-jira-user-config.js';
-
-type ConfigFieldKey = keyof QwenJiraUserConfig;
 
 @Injectable()
 export class ConfigCliService {
@@ -34,6 +34,14 @@ export class ConfigCliService {
           readline,
           currentConfig.resultOutputDir,
         ),
+        weeklyReportWeekday: await this.promptForWeeklyReportWeekday(
+          readline,
+          currentConfig.weeklyReportWeekday,
+        ),
+        weeklyReportHour: await this.promptForWeeklyReportHour(
+          readline,
+          currentConfig.weeklyReportHour,
+        ),
       };
 
       process.stdout.write('\n');
@@ -47,6 +55,14 @@ export class ConfigCliService {
         }\n`,
       );
       process.stdout.write(`- resultOutputDir: ${nextConfig.resultOutputDir}\n`);
+      process.stdout.write(
+        `- weeklyReportWeekday: ${nextConfig.weeklyReportWeekday ?? '(없음)'}\n`,
+      );
+      process.stdout.write(
+        `- weeklyReportHour: ${
+          nextConfig.weeklyReportHour !== undefined ? nextConfig.weeklyReportHour : '(없음)'
+        }\n`,
+      );
 
       const confirmed = await this.askYesNoQuestion(readline, '저장하시겠습니까? (Y/N): ');
 
@@ -133,6 +149,66 @@ export class ConfigCliService {
       }
 
       process.stdout.write('출력 폴더 경로는 비워둘 수 없습니다.\n');
+    }
+  }
+
+  private async promptForWeeklyReportWeekday(
+    readline: ReturnType<typeof createInterface>,
+    currentValue?: WeeklyReportWeekday,
+  ): Promise<WeeklyReportWeekday | undefined> {
+    const currentLabel = currentValue ?? '(없음)';
+    const shouldEdit = await this.askYesNoQuestion(
+      readline,
+      `주간보고 실행 요일을 수정하시겠습니까? (Y/N) [현재: ${currentLabel}]: `,
+    );
+
+    if (!shouldEdit) {
+      return currentValue;
+    }
+
+    process.stdout.write('요일을 선택하세요:\n');
+
+    WEEKLY_REPORT_WEEKDAYS.forEach((weekday, index) => {
+      process.stdout.write(`${index + 1}. ${weekday}\n`);
+    });
+
+    while (true) {
+      const answer = (await readline.question(`요일 [1-${WEEKLY_REPORT_WEEKDAYS.length}]: `)).trim();
+      const parsed = Number.parseInt(answer, 10);
+
+      if (Number.isInteger(parsed) && parsed >= 1 && parsed <= WEEKLY_REPORT_WEEKDAYS.length) {
+        return WEEKLY_REPORT_WEEKDAYS[parsed - 1];
+      }
+
+      process.stdout.write(
+        `1부터 ${WEEKLY_REPORT_WEEKDAYS.length} 사이의 숫자를 입력해주세요.\n`,
+      );
+    }
+  }
+
+  private async promptForWeeklyReportHour(
+    readline: ReturnType<typeof createInterface>,
+    currentValue?: number,
+  ): Promise<number | undefined> {
+    const currentLabel = currentValue !== undefined ? String(currentValue) : '(없음)';
+    const shouldEdit = await this.askYesNoQuestion(
+      readline,
+      `주간보고 실행 시간을 수정하시겠습니까? (Y/N) [현재: ${currentLabel}]: `,
+    );
+
+    if (!shouldEdit) {
+      return currentValue;
+    }
+
+    while (true) {
+      const answer = (await readline.question('실행 시간을 입력하세요 (0-23): ')).trim();
+      const parsed = Number.parseInt(answer, 10);
+
+      if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 23) {
+        return parsed;
+      }
+
+      process.stdout.write('0부터 23 사이의 정수를 입력해주세요.\n');
     }
   }
 

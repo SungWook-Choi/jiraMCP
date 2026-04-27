@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 const { spawn, spawnSync } = require('node:child_process');
-const { closeSync, openSync } = require('node:fs');
+const { closeSync, openSync, readFileSync } = require('node:fs');
 const http = require('node:http');
+const { homedir } = require('node:os');
 const { existsSync } = require('node:fs');
 const { resolve } = require('node:path');
 
@@ -56,7 +57,7 @@ async function main(currentCommand) {
 async function startServer(runtimePaths) {
   ensureServerRuntimeDir(runtimePaths);
 
-  const currentState = readServerRuntimeState(runtimePaths);
+  const currentState = applyConfiguredServerPort(readServerRuntimeState(runtimePaths));
 
   if (currentState !== null) {
     const currentStatus = await getRecordedServerStatus(currentState);
@@ -75,7 +76,7 @@ async function startServer(runtimePaths) {
   }
 
   const host = parseHost(process.env.HOST);
-  const port = parsePort(process.env.PORT);
+  const port = readConfiguredServerPort();
   const stdoutFd = openSync(runtimePaths.logPath, 'a');
   const stderrFd = openSync(runtimePaths.logPath, 'a');
 
@@ -87,6 +88,7 @@ async function startServer(runtimePaths) {
       windowsHide: true,
       env: {
         ...process.env,
+        PORT: String(port),
         QWEN_JIRA_SERVER_RUNTIME_DIR: runtimePaths.runtimeDir,
         QWEN_JIRA_SERVER_STATE_PATH: runtimePaths.statePath,
         QWEN_JIRA_SERVER_LOG_PATH: runtimePaths.logPath,
@@ -114,7 +116,7 @@ async function startServer(runtimePaths) {
 }
 
 async function showStatus(runtimePaths) {
-  const currentState = readServerRuntimeState(runtimePaths);
+  const currentState = applyConfiguredServerPort(readServerRuntimeState(runtimePaths));
 
   if (currentState === null) {
     process.stdout.write('qwen-jira server is not running.\n');
@@ -143,7 +145,7 @@ async function showStatus(runtimePaths) {
 }
 
 async function stopServer(runtimePaths) {
-  const currentState = readServerRuntimeState(runtimePaths);
+  const currentState = applyConfiguredServerPort(readServerRuntimeState(runtimePaths));
 
   if (currentState === null) {
     process.stdout.write('qwen-jira server is not running.\n');
@@ -258,8 +260,15 @@ function isServerResponsive(state) {
         timeout: 1000,
       },
       (response) => {
-        response.resume();
-        resolvePromise((response.statusCode ?? 500) < 500);
+        const chunks = [];
+
+        response.on('data', (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+
+        response.on('end', () => {
+          resolvePromise(isExpectedHealthResponse(response.statusCode, Buffer.concat(chunks)));
+        });
       },
     );
 
@@ -274,14 +283,58 @@ function isServerResponsive(state) {
   });
 }
 
-function parsePort(value) {
-  const parsed = Number.parseInt(value ?? '3000', 10);
+function readConfiguredServerPort() {
+  try {
+    const configPath = resolve(homedir(), '.qwen-jira-mcp', 'config.json');
+    const parsedConfig = JSON.parse(readFileSync(configPath, 'utf8'));
+    const parsedPort = normalizePositivePort(parsedConfig?.serverPort);
+
+    if (parsedPort !== null) {
+      return parsedPort;
+    }
+  } catch {
+  }
+
+  return 3000;
+}
+
+function applyConfiguredServerPort(state) {
+  if (state === null) {
+    return null;
+  }
+
+  return {
+    ...state,
+    port: readConfiguredServerPort(),
+  };
+}
+
+function normalizePositivePort(value) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
 
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    return 3000;
+    return null;
   }
 
   return parsed;
+}
+
+function isExpectedHealthResponse(statusCode, bodyBuffer) {
+  if (statusCode !== 200) {
+    return false;
+  }
+
+  try {
+    const payload = JSON.parse(bodyBuffer.toString('utf8'));
+
+    return (
+      payload?.status === 'ok' &&
+      typeof payload?.jiraConfigured === 'boolean' &&
+      Array.isArray(payload?.missingEnv)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function parseHost(value) {

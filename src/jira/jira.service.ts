@@ -52,10 +52,15 @@ export interface JiraSearchResult {
 interface JiraSearchResponse {
   issues?: JiraIssueResponse[];
   total?: number;
+  nextPageToken?: string;
 }
 
 interface JiraCommentResponse {
   id?: string;
+}
+
+interface JiraMyselfResponse {
+  accountId?: string;
 }
 
 interface JiraUserSearchResponseItem {
@@ -105,8 +110,10 @@ interface JiraIssueResponse {
 
 const JIRA_SEARCH_PATH = '/rest/api/3/search/jql';
 const JIRA_ISSUE_PATH = '/rest/api/3/issue';
+const JIRA_MYSELF_PATH = '/rest/api/3/myself';
 const JIRA_USER_SEARCH_PATH = '/rest/api/3/user/search';
 const JIRA_PROJECT_SEARCH_PATH = '/rest/api/3/project/search';
+const JIRA_WEEKLY_REPORT_SEARCH_PAGE_SIZE = 50;
 const CHANGELOG_TRACKED_FIELDS = new Set([
   'status',
   'assignee',
@@ -396,6 +403,49 @@ export class JiraService {
     };
   }
 
+  async getCurrentUserAccountId(): Promise<string> {
+    const settings = this.getSettings();
+    const response = await fetch(this.buildMyselfUrl(settings.baseUrl), {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: this.createAuthorizationHeader(settings),
+      },
+    });
+
+    if (!response.ok) {
+      const errorBody = await this.readResponseBody(response);
+
+      throw new Error(
+        `Jira myself request failed (${response.status} ${response.statusText}): ${errorBody}`,
+      );
+    }
+
+    const payload = (await response.json()) as JiraMyselfResponse;
+    const accountId = payload.accountId?.trim();
+
+    if (!accountId) {
+      throw new Error('Jira myself response does not include accountId.');
+    }
+
+    return accountId;
+  }
+
+  async searchWeeklyReportIssues(
+    accountId: string,
+    start: Date,
+    end: Date,
+  ): Promise<JiraSearchResult['issues']> {
+    const settings = this.getSettings();
+    const candidateIssues = await this.fetchWeeklyReportIssueCandidates(accountId, settings);
+    const filteredIssues = candidateIssues.filter((issue) =>
+      this.hasRelevantChangelogActivity(issue, start, end),
+    );
+    const uniqueIssues = this.uniqueIssuesByKey(filteredIssues);
+
+    return uniqueIssues.map((issue) => this.normalizeIssue(issue));
+  }
+
   private buildProjectSearchUrl(baseUrl: string, query: string): string {
     const normalizedBaseUrl = this.normalizeBaseUrl(baseUrl);
     const url = new URL(`${normalizedBaseUrl}${JIRA_PROJECT_SEARCH_PATH}`);
@@ -421,6 +471,12 @@ export class JiraService {
     return `${normalizedBaseUrl}${JIRA_ISSUE_PATH}/${encodeURIComponent(issueKey)}/comment`;
   }
 
+  private buildMyselfUrl(baseUrl: string): string {
+    const normalizedBaseUrl = this.normalizeBaseUrl(baseUrl);
+
+    return `${normalizedBaseUrl}${JIRA_MYSELF_PATH}`;
+  }
+
   private async buildAssigneeClause(
     query: QuerySchema,
     settings: JiraSettings,
@@ -440,6 +496,70 @@ export class JiraService {
     const normalizedBaseUrl = this.normalizeBaseUrl(baseUrl);
 
     return `${normalizedBaseUrl}${JIRA_SEARCH_PATH}`;
+  }
+
+  private async fetchWeeklyReportIssueCandidates(
+    accountId: string,
+    settings: JiraSettings,
+  ): Promise<JiraIssueResponse[]> {
+    const issues: JiraIssueResponse[] = [];
+    const seenKeys = new Set<string>();
+    const jql = `assignee = ${this.quoteValue(accountId)} ORDER BY updated DESC`;
+    let nextPageToken: string | undefined;
+
+    while (true) {
+      const searchUrl = new URL(this.buildSearchUrl(settings.baseUrl));
+
+      searchUrl.searchParams.set('jql', jql);
+      searchUrl.searchParams.set('maxResults', String(JIRA_WEEKLY_REPORT_SEARCH_PAGE_SIZE));
+      searchUrl.searchParams.set('expand', 'changelog');
+
+      for (const field of JIRA_SEARCH_FIELDS) {
+        searchUrl.searchParams.append('fields', field);
+      }
+
+      if (nextPageToken) {
+        searchUrl.searchParams.set('nextPageToken', nextPageToken);
+      }
+
+      const response = await fetch(searchUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: this.createAuthorizationHeader(settings),
+        },
+      });
+
+      if (!response.ok) {
+        const errorBody = await this.readResponseBody(response);
+
+        throw new Error(
+          `Weekly report Jira search failed (${response.status} ${response.statusText}): ${errorBody}`,
+        );
+      }
+
+      const payload = (await response.json()) as JiraSearchResponse;
+      const pageIssues = payload.issues ?? [];
+
+      for (const issue of pageIssues) {
+        const key = issue.key?.trim();
+
+        if (!key || seenKeys.has(key)) {
+          continue;
+        }
+
+        seenKeys.add(key);
+        issues.push(issue);
+      }
+
+      nextPageToken = payload.nextPageToken?.trim() || undefined;
+
+      if (!nextPageToken) {
+        break;
+      }
+    }
+
+    return issues;
   }
 
   private normalizeBaseUrl(baseUrl: string): string {
@@ -607,6 +727,21 @@ export class JiraService {
     }
 
     return false;
+  }
+
+  private uniqueIssuesByKey(issues: JiraIssueResponse[]): JiraIssueResponse[] {
+    const seen = new Set<string>();
+
+    return issues.filter((issue) => {
+      const key = issue.key?.trim();
+
+      if (!key || seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
   }
 
   private startOfLocalDay(date: Date): Date {

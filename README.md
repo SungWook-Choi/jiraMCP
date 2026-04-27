@@ -66,7 +66,8 @@ qwen-jira-config
 ```
 
 설정 파일 경로는 `<사용자 홈>/.qwen-jira-mcp/config.json` 입니다.
-설정 파일 키는 `serverPort`, `assigneeAllInclude`, `resultOutputDir` 세 개만 사용합니다.
+설정 파일 키는 `serverPort`, `assigneeAllInclude`, `resultOutputDir`, `weeklyReportWeekday`, `weeklyReportHour` 를 사용합니다.
+`weeklyReportWeekday`는 `monday`부터 `sunday`까지의 선택형 입력이고, `weeklyReportHour`는 `0`부터 `23`까지의 정수입니다.
 
 ### 4. MCP 실행
 
@@ -105,6 +106,10 @@ CLI 첫 진입에서는 `조회` 또는 `댓글 입력`을 선택합니다.
 - `all` 조회에서는 상태 `해야 할 일`, `To Do`, `완료`, `Done` 이 JQL에서 제외됩니다.
 
 Markdown으로 결과를 저장하면 사용자 설정 파일의 `resultOutputDir` 값을 사용합니다. 설정이 없으면 기존 기본값인 `./output` 으로 저장하고, 필요한 폴더는 자동 생성합니다.
+
+`qwen-jira-server`가 실행 중이면 설정된 `weeklyReportWeekday`와 `weeklyReportHour` 기준으로 주간보고가 자동 생성됩니다. 자동 생성 파일은 `resultOutputDir/weekly-report/jira-weekly-report-YYYY-Www.md` 형식으로 저장되며, 같은 주에는 덮어씁니다.
+
+주간보고는 Jira `myself` API의 `accountId`를 기준으로 현재 로그인한 토큰 소유자 본인 이슈만 조회하고, `updated` 값이 아니라 `changelog` 기준의 최근 7일 반개구간으로 판정합니다.
 
 ## Structure
 

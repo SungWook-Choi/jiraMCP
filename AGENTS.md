@@ -33,5 +33,6 @@
 - Knowledge guide: `/Users/bbosungmini/WebstormProjects/qwen3JiraMCP/Knowledge/README.md`
 - Main-agent rule: `/Users/bbosungmini/WebstormProjects/qwen3JiraMCP/Knowledge/rules/main-agent.md`
 - Sub-agent rule: `/Users/bbosungmini/WebstormProjects/qwen3JiraMCP/Knowledge/rules/sub-agent.md`
+- External API rule: `/Users/bbosungmini/WebstormProjects/qwen3JiraMCP/Knowledge/rules/external-api.md`
 - NestJS rule: `/Users/bbosungmini/WebstormProjects/qwen3JiraMCP/Knowledge/rules/nestjs.md`
 - React rule: `/Users/bbosungmini/WebstormProjects/qwen3JiraMCP/Knowledge/rules/react.md`

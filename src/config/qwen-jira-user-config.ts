@@ -2,10 +2,24 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 
+export const WEEKLY_REPORT_WEEKDAYS = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+] as const;
+
+export type WeeklyReportWeekday = (typeof WEEKLY_REPORT_WEEKDAYS)[number];
+
 export interface QwenJiraUserConfig {
   serverPort: number;
   assigneeAllInclude: string[];
   resultOutputDir: string;
+  weeklyReportWeekday?: WeeklyReportWeekday;
+  weeklyReportHour?: number;
 }
 
 export const DEFAULT_QWEN_JIRA_USER_CONFIG: QwenJiraUserConfig = {
@@ -25,6 +39,8 @@ export function normalizeQwenJiraUserConfig(
     serverPort: normalizePositivePort(input?.serverPort),
     assigneeAllInclude: normalizeAssigneeAllInclude(input?.assigneeAllInclude),
     resultOutputDir: normalizeOutputDir(input?.resultOutputDir),
+    weeklyReportWeekday: normalizeWeeklyReportWeekday(input?.weeklyReportWeekday),
+    weeklyReportHour: normalizeWeeklyReportHour(input?.weeklyReportHour),
   };
 }
 
@@ -64,6 +80,13 @@ export function resolveQwenJiraResultOutputDir(
       : DEFAULT_QWEN_JIRA_USER_CONFIG.resultOutputDir;
 
   return resolve(baseDir, outputDir);
+}
+
+export function resolveQwenJiraWeeklyReportOutputDir(
+  config?: QwenJiraUserConfig | null,
+  baseDir = process.cwd(),
+): string {
+  return resolve(resolveQwenJiraResultOutputDir(config, baseDir), 'weekly-report');
 }
 
 export function resolveQwenJiraAssigneeAllInclude(
@@ -140,6 +163,22 @@ function normalizeOutputDir(value: unknown): string {
   const normalized = typeof value === 'string' ? value.trim() : '';
 
   return normalized.length > 0 ? normalized : DEFAULT_QWEN_JIRA_USER_CONFIG.resultOutputDir;
+}
+
+function normalizeWeeklyReportWeekday(value: unknown): WeeklyReportWeekday | undefined {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+
+  return WEEKLY_REPORT_WEEKDAYS.includes(normalized as WeeklyReportWeekday)
+    ? (normalized as WeeklyReportWeekday)
+    : undefined;
+}
+
+function normalizeWeeklyReportHour(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    return undefined;
+  }
+
+  return value >= 0 && value <= 23 ? value : undefined;
 }
 
 function isFileMissingError(error: unknown): boolean {

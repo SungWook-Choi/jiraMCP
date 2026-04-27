@@ -9,6 +9,7 @@
 ## 역할
 
 - `sub-agent`는 NestJS 설계 및 구현 담당이다.
+- `sub-agent` 모델은 기본적으로 `gpt-5.4-mini`를 사용한다.
 - 작업지시서를 기준으로 설계, 구현, 수정, 산출물 작성을 맡는다.
 - `sub-agent`는 `main-agent`가 작성하거나 갱신한 작업지시서를 공식 기준으로 사용한다.
 - `sub-agent`는 현재 자신에게 할당된 작업 항목 외의 새 작업을 임의로 이어받지 않는다.
@@ -33,3 +34,9 @@
 - 작업지시서를 꼼꼼하게 확인한다.
 - 범위 밖 수정이나 개발을 하지 않는다.
 - 규칙을 예외 없이 지킨다.
+## External API Gate
+
+13. If the work item touches a third-party API or product REST API, `sub-agent` must read the latest verification notes from the work instruction before implementation.
+14. `sub-agent` must not switch endpoints, pagination rules, or request shapes based on assumption or memory when the work item depends on an external API contract.
+15. If runtime logs show deprecation, removal, migration guidance, or request-shape errors, `sub-agent` must stop further guess-based changes and ask `main-agent` for refreshed verification.
+16. Completion is not valid unless the final report states which official API contract was implemented and what runtime verification was or was not completed.

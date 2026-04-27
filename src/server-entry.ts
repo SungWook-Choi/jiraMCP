@@ -2,7 +2,6 @@ import 'reflect-metadata';
 
 import { NestFactory } from '@nestjs/core';
 
-import { AppModule } from './app.module.js';
 import {
   clearServerRuntimeState,
   formatServerAddress,
@@ -15,6 +14,7 @@ import {
   readQwenJiraUserConfig,
   resolveQwenJiraServerPort,
 } from './config/qwen-jira-user-config.js';
+import { ServerModule } from './server.module.js';
 
 async function bootstrap() {
   const runtimePaths = getServerRuntimePathsFromEnv();
@@ -22,7 +22,7 @@ async function bootstrap() {
   logLifecycle('Server starting.', runtimePaths !== null);
   const userConfig = await readQwenJiraUserConfig();
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create(ServerModule, {
     logger: ['log', 'warn', 'error'],
   });
   const host = parseHost(process.env.HOST);
