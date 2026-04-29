@@ -6,8 +6,10 @@
 2. Write and save docs and code as `UTF-8`.
 3. Do not guess, reinterpret, or convert to another encoding.
 4. Do not start implementation before reading this file.
-5. Use this file as a lightweight keymap only.
-6. Read detailed rules from `Knowledge/rules`.
+5. If Korean text appears broken, stop the task and re-open the original file as `UTF-8` before doing anything else.
+6. Any file saved in a non-`UTF-8` encoding or any guessed reinterpretation of broken Korean text is an immediate review fail.
+7. Use this file as a lightweight keymap only.
+8. Read detailed rules from `Knowledge/rules`.
 
 ## Workflow
 

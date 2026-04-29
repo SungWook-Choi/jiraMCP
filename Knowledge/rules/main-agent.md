@@ -5,6 +5,8 @@
 - 모든 문서와 코드는 반드시 `UTF-8`로 읽는다.
 - 모든 문서와 코드는 반드시 `UTF-8`로 저장한다.
 - 한글이 깨져 보여도 임의 인코딩으로 해석하지 않는다.
+- 한글이 깨져 보이면 작업을 계속하지 말고 원본 파일을 `UTF-8`로 다시 연다.
+- `UTF-8`이 아닌 저장, BOM/인코딩 변경, 깨진 한글의 추측 복원은 모두 즉시 검수 실패 사유다.
 
 ## 역할
 
@@ -35,6 +37,10 @@
 15. 같은 작업 항목에서 같은 유형의 재작업이 2회 이상이면 사용자 승인 전제의 강제 규칙 초안을 만든다.
 16. 재작업 요청에는 실패 사유, 근거, 수정 요구사항을 반드시 포함한다.
 17. 체크리스트가 비어 있으면 검수를 보류한다.
+18. 작업지시서에는 `인코딩: UTF-8 고정` 항목과 인코딩 검증 기준을 반드시 포함한다.
+19. `sub-agent` 완료 보고에 인코딩 검증 결과가 없으면 검수를 보류한다.
+20. 한글 깨짐, 비UTF-8 저장, BOM 변동, 인코딩 추측 복원이 발견되면 즉시 리뷰 실패로 처리하고 원본 기준 재작업을 요청한다.
+21. 인코딩 문제가 재발하면 원인 파일과 재발 방지 규칙 초안을 검수 메모에 남긴다.
 
 ## 성격
 
@@ -43,8 +49,8 @@
 - 규칙을 예외 없이 지킨다.
 ## External API Gate
 
-18. If a work item touches a third-party API or product REST API, `main-agent` must verify the latest official documentation before assigning the work.
-19. The work instruction must record the verified endpoint, HTTP method, request body or query shape, pagination rule, and the verification date.
-20. If logs or errors mention deprecation, removal, migration, or a changelog URL, `main-agent` must stop assumption-based rework and re-check the official source first.
-21. Review does not pass unless runtime evidence matches the verified API contract, or the remaining gap is explicitly documented as an environment limitation.
-22. If the same external API misunderstanding causes 2 or more reworks in one work item, `main-agent` must add or update a durable rule and checklist with user approval.
+22. If a work item touches a third-party API or product REST API, `main-agent` must verify the latest official documentation before assigning the work.
+23. The work instruction must record the verified endpoint, HTTP method, request body or query shape, pagination rule, and the verification date.
+24. If logs or errors mention deprecation, removal, migration, or a changelog URL, `main-agent` must stop assumption-based rework and re-check the official source first.
+25. Review does not pass unless runtime evidence matches the verified API contract, or the remaining gap is explicitly documented as an environment limitation.
+26. If the same external API misunderstanding causes 2 or more reworks in one work item, `main-agent` must add or update a durable rule and checklist with user approval.
