@@ -27,7 +27,7 @@
 | `qwen-jira-server` | 로컬 API 서버 실행/관리 |
 | `qwen-jira-config` | 사용자 설정 관리 |
 | `qwen-jira` | Jira 조회 및 댓글 입력 CLI |
-| `qwen-jira-mcp` | MCP 서버 (scaffold, 미구현) |
+| `qwen-jira-mcp` | MCP 서버 (read-only 조회 어댑터) |
 
 **사용 흐름:**  
 `qwen-jira-server` (서버 시작) → `qwen-jira-config` (최초 1회 설정) → `qwen-jira` (반복 사용)
@@ -298,14 +298,29 @@ Jira 이슈에 댓글을 작성합니다.
 
 ## 8. MCP 서버 (`qwen-jira-mcp`)
 
-> **주의:** 현재 scaffold 상태이며 실제 Jira 조회 기능은 미구현입니다.  
-> 실행 시 서버 descriptor만 반환되고 데이터 조회는 동작하지 않습니다.
+`qwen-jira-mcp`는 stdio 기반 MCP 서버로 실행되며, 로컬 `NestJS Server`의 HTTP API를 호출하는 read-only 조회 어댑터입니다.
 
 ```bash
 qwen-jira-mcp
 ```
 
-실제 MCP Jira 조회 기능은 후속 구현 완료 후 사용 가능합니다.
+노출되는 tool은 아래 4개입니다.
+
+- `health_status`: 로컬 서버 상태와 Jira 설정 여부를 확인합니다.
+- `jira_search`: 서버의 Jira 조회 결과를 반환합니다.
+- `jira_issue_get`: 이슈 키로 단일 이슈를 조회합니다.
+- `jira_project_lookup`: 프로젝트 이름 또는 키로 프로젝트 후보를 조회합니다.
+
+MCP는 Jira REST API를 직접 호출하지 않고, CLI와 같은 서버 API 계약과 base URL 해석 규칙을 재사용합니다.
+
+- `QWEN_JIRA_API_BASE_URL`
+- `LOCAL_SERVER_API_BASE_URL`
+- 사용자 설정 파일의 `serverPort`
+- 기본값 `http://127.0.0.1:3000`
+
+이번 단계 MCP tool은 모두 read-only 이며 `jira_comment_create`, 이슈 생성, 이슈 수정 기능은 포함하지 않습니다.
+
+서버가 실행 중이지 않으면 MCP tool 호출은 로컬 서버를 먼저 시작하라는 안내를 포함한 오류를 반환합니다.
 
 ---
 

@@ -1,12 +1,10 @@
 import { Module } from '@nestjs/common';
 
-import { JiraModule } from '../jira/jira.module.js';
-import { QueryModule } from '../query/query.module.js';
-import { SummaryModule } from '../summary/summary.module.js';
+import { CliModule } from '../cli/cli.module.js';
 import { McpService } from './mcp.service.js';
 
 @Module({
-  imports: [JiraModule, QueryModule, SummaryModule],
+  imports: [CliModule],
   providers: [McpService],
   exports: [McpService],
 })

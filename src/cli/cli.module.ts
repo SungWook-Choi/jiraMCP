@@ -7,6 +7,6 @@ import { CliService } from './cli.service.js';
 @Module({
   imports: [QueryModule],
   providers: [CliApiClient, CliService],
-  exports: [CliService],
+  exports: [CliApiClient, CliService],
 })
 export class CliModule {}
